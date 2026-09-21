@@ -97,6 +97,7 @@ UI_SRCS  := $(SRC)/theme.cpp \
             $(SRC)/ui_power.cpp \
             $(SRC)/ui_light.cpp \
             $(SRC)/status_light.cpp \
+            $(SRC)/battery.cpp \
             $(SRC)/pet.cpp \
             $(SRC)/ui_log.cpp \
             $(SRC)/ui_alert.cpp \
