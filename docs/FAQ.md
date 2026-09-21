@@ -29,13 +29,13 @@ Either way: no GPS, no buzzer, no extra modules. The board *is* the whole device
 
 No. That's what the [web flasher](https://squachwatch.com/) is for — plug your board into a computer running Firefox, Chrome, Edge, or Brave, hit Connect & Install, and the firmware goes straight from your browser onto the board. No compiler, no IDE, no me judging your PlatformIO setup (I would never. probably).
 
-If you *do* want to build from source — maybe you're modifying something, maybe you just don't trust browsers with USB access, respectable — grab [PlatformIO](https://platformio.org/) and follow [docs/BUILD.md](docs/BUILD.md).
+If you *do* want to build from source — maybe you're modifying something, maybe you just don't trust browsers with USB access, respectable — grab [PlatformIO](https://platformio.org/) and follow [BUILD.md](BUILD.md).
 
 ## How does detection actually work?
 
 Every detection type has its own fingerprint — a WiFi OUI prefix, a BLE service UUID, a manufacturer ID, sometimes an SSID pattern. The board passively listens (it never transmits anything to provoke a response — this is 100% receive-only, no active probing) and checks every WiFi/BLE packet it overhears against that list. Match found? You get a full-screen ALERT: what it thinks it saw, how confident it is, the MAC, RSSI, channel, and a little radar widget because I have a flair for the dramatic.
 
-Confidence matters — some signatures are rock-solid (Flock, Axon, Meta glasses), some are best-effort (AirTag, Raven). The ALERT screen tells you which is which so you're not treating a maybe like a certainty. Full technical breakdown, per-type, with sources: [docs/DETECTIONS.md](docs/DETECTIONS.md).
+Confidence matters — some signatures are rock-solid (Flock, Axon, Meta glasses), some are best-effort (AirTag, Raven). The ALERT screen tells you which is which so you're not treating a maybe like a certainty. Full technical breakdown, per-type, with sources: [DETECTIONS.md](DETECTIONS.md).
 
 ## Is this legal? Am I going to get in trouble for owning one?
 
@@ -65,7 +65,7 @@ Rotation lives in the top-right corner of the title bar — tap to cycle through
 
 ## Can I contribute?
 
-Sure. PRs welcome, especially new detection signatures with real sources behind them (see [docs/DETECTIONS.md](docs/DETECTIONS.md) for the format — I take provenance seriously, I don't want to flag your neighbor's baby monitor as a Flock camera because someone guessed at an OUI). The whole project is MIT-licensed. Fork it, break it, make it weirder, send it back.
+Sure. PRs welcome, especially new detection signatures with real sources behind them (see [DETECTIONS.md](DETECTIONS.md) for the format — I take provenance seriously, I don't want to flag your neighbor's baby monitor as a Flock camera because someone guessed at an OUI). The whole project is licensed **GPL-3.0** — see [LICENSE](../LICENSE). Fork it, break it, make it weirder, send it back; GPL just asks that what you send out stays as open as what you got.
 
 ## Any relation to talkingsasquach.com?
 

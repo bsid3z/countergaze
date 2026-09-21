@@ -26,7 +26,7 @@ CXX      ?= g++
 CXXFLAGS := -std=c++17 -O1 -g -Wall -Wextra -Wno-unused-parameter \
             -I$(SIM) -I$(GFX) -I$(INC)
 
-TESTS := remote_id_test ibeacon_test signatures_test emitter_roundtrip_test ignore_list_test hacker_test pwnagotchi_test shim_fidelity_test squachmesh_test qwerty_test meshmsg_test device_info_test security_test emote_script_test blackbox_test bingo_test hunt_test bgretire_test autoquiet_test framepush_test
+TESTS := remote_id_test ibeacon_test signatures_test emitter_roundtrip_test ignore_list_test hacker_test pwnagotchi_test shim_fidelity_test fillprim_test squachmesh_test qwerty_test meshmsg_test device_info_test security_test emote_script_test blackbox_test bingo_test hunt_test bgretire_test autoquiet_test framepush_test
 
 # Only the units under test get linked in. Pulling the whole firmware
 # would drag in TFT_eSPI, NimBLE and the UI, and a test that needs a
@@ -72,6 +72,10 @@ hunt_test_SRCS               := $(SRC)/settings.cpp
 # test IS gfx/TFT_eSPI.h.
 framepush_test_SRCS          :=
 shim_fidelity_test_SRCS      :=
+# Also header-only: the fill primitives under test are inline in
+# gfx/TFT_eSPI.h, and the reference they are checked against is that same
+# header's drawPixel.
+fillprim_test_SRCS           :=
 
 .PHONY: all clean
 all: $(addprefix run-,$(TESTS))

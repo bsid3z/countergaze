@@ -158,7 +158,21 @@ void pushFrame(const uint16_t* src, int32_t w, int32_t h, int32_t x, int32_t y) 
 
     const int32_t rw = s_canvas->width();    // rotated, as the UI sees it
     const int32_t rh = s_canvas->height();
-    if (w != rw || h != rh) return;          // not this frame's buffer
+    if (w != rw || h != rh) {
+        // Dropping the frame is right -- a buffer that is not this shape
+        // cannot be written into this one -- but dropping it in silence is
+        // not. The symptom on the glass is a frozen screen, which looks like
+        // a hang or a dead panel and sends whoever is debugging it a long way
+        // from the rotation bug that actually caused it. Said once per
+        // mismatch rather than 7 times a second, so it stays readable.
+        static int32_t lastW = -1, lastH = -1;
+        if (w != lastW || h != lastH) {
+            lastW = w; lastH = h;
+            Serial.printf("[panel] frame %ldx%ld does not fit the %ldx%ld canvas -- dropped\n",
+                          (long)w, (long)h, (long)rw, (long)rh);
+        }
+        return;
+    }
 
 #if SQW_JC3248_PANEL_ROTATE
     // The panel is already turned, so the canvas buffer has the same shape

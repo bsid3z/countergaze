@@ -581,6 +581,29 @@ public:
     explicit TFT_eSprite(TFT_eSPI* parent) : TFT_eSPI(0, 0), _parent(parent) {}
 
     void* createSprite(int16_t w, int16_t h) {
+        if (w <= 0 || h <= 0) return nullptr;
+#if defined(SQW_HW_PANEL)
+        // Ask before allocating, because on this build we cannot be told no.
+        //
+        // main.cpp checks whether this returned null and carries on without a
+        // frame buffer if it did -- that path exists, it is tested, and it is
+        // the difference between a degraded board and a dead one. But
+        // Arduino-ESP32 compiles with exceptions off, so std::vector cannot
+        // throw bad_alloc: handed a null from the allocator it writes through
+        // it and panics inside assign(), and the caller's check never runs.
+        //
+        // So the size is checked against the largest block that actually
+        // exists first. Not a guarantee -- something else can take it between
+        // here and the next line -- but it turns the ordinary case (a buffer
+        // too big for the free PSRAM) from a crash back into the null return
+        // the caller is already written to handle.
+        {
+            const size_t want = (size_t)w * (size_t)h * sizeof(uint16_t);
+            const size_t have = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
+            const size_t internal = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+            if (want > have && want > internal) return nullptr;
+        }
+#endif
         _w = w; _h = h;
         _buf.assign((size_t)w * h, 0x0000);
         _created = true;

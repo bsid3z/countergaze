@@ -175,6 +175,12 @@ jobs:
           # rlphantom-r is the RL Phantom 2.4" (Sunton ESP32-2432S024R), the
           # resistive-touch version, confirmed on real boards.
           pio run -e cyd -e cyd-ili9341 -e awok -e rlphantom-r -e cyd-fast -e cyd-ili9341-fast
+          # The Guition JC3248W535EN. Built and published separately from the
+          # six above because it is an ESP32-S3, not an ESP32: its bootloader
+          # is a different binary at a different offset (0x0, not 0x1000), so
+          # it cannot share the esp32-*.bin parts the others are asserted to
+          # have in common.
+          pio run -e jc3248
           # The Phantom's capacitive version has never run on a real board, so
           # it is compiled to keep its code honest but NOT published anywhere.
           pio run -e rlphantom
@@ -261,6 +267,23 @@ jobs:
             cp ".pio/build/$v/firmware.bin" "$v-firmware.bin"
           done
 
+      - name: Collect the ESP32-S3 parts (Guition JC3248W535EN)
+        # Deliberately not folded into the loop above. That loop asserts one
+        # bootloader and one partition table are byte-identical across every
+        # build and ships them once as esp32-*.bin; this board's are neither
+        # identical to those nor interchangeable with them, and its bootloader
+        # belongs at 0x0 rather than 0x1000. Its own names, its own offsets.
+        run: |
+          cp .pio/build/jc3248/bootloader.bin esp32s3-bootloader.bin
+          cp .pio/build/jc3248/partitions.bin esp32s3-partitions.bin
+          cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" esp32s3-otadata.bin
+          test "$(stat -c%s esp32s3-otadata.bin)" -eq 8192
+          cp .pio/build/jc3248/firmware.bin jc3248-firmware.bin
+          # No merged image: the merged blob is padded across the gaps between
+          # regions, one of which is NVS, so flashing it at offset 0 erases
+          # saved settings. The other boards accept that for manual recovery;
+          # this one has never shipped a merged image and does not start now.
+
       - name: Sign firmware for Bluetooth updates
         # Each board checks an update against the public key compiled into
         # include/ota_pubkey.h, over a message that includes its own build
@@ -275,7 +298,7 @@ jobs:
           fi
           umask 077
           printf '%s\n' "$OTA_SIGNING_KEY" > "$RUNNER_TEMP/ota_key.pem"
-          for v in cyd cyd-ili9341 awok rlphantom-r cyd-fast cyd-ili9341-fast; do
+          for v in cyd cyd-ili9341 awok rlphantom-r cyd-fast cyd-ili9341-fast jc3248; do
             python tools/sign_firmware.py --key "$RUNNER_TEMP/ota_key.pem" \
               --env "$v" --bin "$v-firmware.bin" --out "$v-firmware.sig"
           done
@@ -305,7 +328,8 @@ jobs:
           for p in ("web-flasher/manifest-cyd.json", "web-flasher/manifest-cyd-ili9341.json",
                     "web-flasher/manifest-awok.json", "web-flasher/manifest-cyd-fast.json",
                     "web-flasher/manifest-cyd-ili9341-fast.json",
-                    "web-flasher/manifest-rlphantom-r.json"):
+                    "web-flasher/manifest-rlphantom-r.json",
+                    "web-flasher/manifest-jc3248.json"):
               m = json.load(open(p))
               m["version"] = "${{ steps.ver.outputs.version }}"
               if name: m["release_name"] = name
@@ -328,6 +352,7 @@ jobs:
           cp web-flasher/manifest-cyd-fast.json manifest-cyd-fast.json
           cp web-flasher/manifest-cyd-ili9341-fast.json manifest-cyd-ili9341-fast.json
           cp web-flasher/manifest-rlphantom-r.json manifest-rlphantom-r.json
+          cp web-flasher/manifest-jc3248.json manifest-jc3248.json
 
       - name: Create GitHub Release with build artifacts
         # A lab tag publishes a flashable build and nothing else. Creating a
@@ -424,6 +449,7 @@ jobs:
           cp web-flasher/manifest-cyd-fast.json _site/manifest-cyd-fast.json
           cp web-flasher/manifest-cyd-ili9341-fast.json _site/manifest-cyd-ili9341-fast.json
           cp web-flasher/manifest-rlphantom-r.json _site/manifest-rlphantom-r.json
+          cp web-flasher/manifest-jc3248.json _site/manifest-jc3248.json
           # A LAB RUN MUST NOT CHANGE WHAT THE PUBLIC PAGE SERVES.
           #
           # A Pages deploy is wholesale -- there is no partial update -- so a
@@ -479,7 +505,13 @@ jobs:
             cp esp32-bootloader.bin _site/esp32-bootloader.bin
             cp esp32-partitions.bin _site/esp32-partitions.bin
             cp esp32-otadata.bin    _site/esp32-otadata.bin
-            for board in cyd cyd-ili9341 awok rlphantom-r cyd-fast cyd-ili9341-fast; do
+            # The ESP32-S3 board's own parts. Separate names because they are
+            # a different chip's binaries, and separate from the esp32-*.bin
+            # above for the same reason the build step keeps them apart.
+            cp esp32s3-bootloader.bin _site/esp32s3-bootloader.bin
+            cp esp32s3-partitions.bin _site/esp32s3-partitions.bin
+            cp esp32s3-otadata.bin    _site/esp32s3-otadata.bin
+            for board in cyd cyd-ili9341 awok rlphantom-r cyd-fast cyd-ili9341-fast jc3248; do
               cp "$board-firmware.bin" "_site/$board-firmware.bin"
               # The Bluetooth update page fetches the image and its signature
               # side by side from the site root.
