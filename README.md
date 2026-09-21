@@ -1,8 +1,11 @@
-# Fork of SquachWatch-CYD by skizzophrenic, for the JC3248W535EN with 320x480 display
+# SquachWatch for the Guition JC3248W535EN
 
-> Surveillance-device detector for cheap ESP32 display boards.
-> **This repo adds the Guition JC3248W535EN. Everything else is
-> [skizzophrenic](https://github.com/skizzophrenic)'s.**
+> **A fork of [SquachWatch-CYD](https://github.com/skizzophrenic/SquachWatch-CYD)
+> by [skizzophrenic](https://github.com/skizzophrenic)**, ported to the
+> **Guition JC3248W535EN** — a 3.5" 320×480 ESP32-S3 board the original
+> cannot run on.
+>
+> Surveillance-device detector. Everything except that port is his work.
 
 ### Two names, so neither surprises you
 
