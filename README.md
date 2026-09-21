@@ -1,4 +1,4 @@
-# SquachWatch-CYD
+# Fork of SquachWatch-CYD by skizzophrenic, for the JC3248W535EN with 320x480 display
 
 > Surveillance-device detector for cheap ESP32 display boards.
 > **This repo adds the Guition JC3248W535EN. Everything else is
@@ -170,7 +170,12 @@ A full beginner-friendly walkthrough is in [docs/BUILD.md](docs/BUILD.md).
 
 ### Guition JC3248W535EN
 
-The reason this fork exists. Three commands:
+**Prebuilt binaries, no toolchain:** [`firmware/`](firmware/) has the four
+`.bin` files and the exact `esptool` command. Read the four gotchas in
+[firmware/README.md](firmware/README.md) first — the bootloader goes at `0x0`
+on an S3, not `0x1000`, and `--no-stub` is required.
+
+To build it yourself, three commands:
 
 ```sh
 git clone https://github.com/bsid3z/countergaze

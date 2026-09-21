@@ -300,8 +300,14 @@ public:
     void drawFastHLine(int32_t x, int32_t y, int32_t w, uint32_t color) {
         fillSpan(x, y, w, color);
     }
-    void drawFastVLine(int32_t x, int32_t y, int32_t h, uint32_t color) {
+    // The vertical twin of fillSpan, and worth its own override for the same
+    // reason: a column walks the buffer with a row-width stride, so the
+    // library's loop re-derives the index and takes a virtual call per pixel.
+    virtual void fillColumn(int32_t x, int32_t y, int32_t h, uint32_t color) {
         for (int32_t i = 0; i < h; i++) drawPixel(x, y + i, color);
+    }
+    void drawFastVLine(int32_t x, int32_t y, int32_t h, uint32_t color) {
+        fillColumn(x, y, h, color);
     }
     void fillRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color) {
         for (int32_t j = 0; j < h; j++) fillSpan(x, y + j, w, color);
@@ -679,6 +685,33 @@ public:
     // that one would have written, in the same colour -- the 8bpp
     // quantisation included, which is why quantise332 is hoisted out of the
     // loop rather than skipped.
+    // fillSpan's mirror image. Same contract: every branch matches one in
+    // drawPixel, so the pixels written and their colours are identical.
+    void fillColumn(int32_t x, int32_t y, int32_t h, uint32_t color) override {
+        if (h <= 0) return;
+        int32_t y0 = y, y1 = y + h;   // half-open
+        if (_vpActive) {
+            if (_vpDatum) {
+                x += _vpX; y0 += _vpY; y1 += _vpY;
+                if (x < 0) return;
+            } else {
+                if (x < _vpX) return;
+                if (y0 < _vpY) y0 = _vpY;
+            }
+            if (x >= _vpW + _vpX) return;
+            if (y1 > _vpH + _vpY) y1 = _vpH + _vpY;
+        }
+        if (x < 0 || x >= _w) return;
+        if (y0 < 0) y0 = 0;
+        if (y1 > _h) y1 = _h;
+        if (y1 <= y0) return;
+
+        const uint16_t c = (_depth == 8) ? quantise332((uint16_t)color)
+                                         : (uint16_t)color;
+        uint16_t* p = _buf.data() + (size_t)y0 * _w + x;
+        for (int32_t j = y0; j < y1; j++) { *p = c; p += _w; }
+    }
+
     void fillSpan(int32_t x, int32_t y, int32_t w, uint32_t color) override {
         if (w <= 0) return;
         int32_t x0 = x, x1 = x + w;   // half-open

@@ -2458,8 +2458,22 @@ void setup() {
 #endif
 
     // Seed the PRNG so the digital rain starts in a fresh-looking state
-    // on every boot. Analog read on a floating pin is plenty.
-    randomSeed(analogRead(34));
+    // on every boot.
+    //
+    // This used to read a floating GPIO34 -- fine on an ESP32, where that is
+    // an input-only ADC pin, and broken on an ESP32-S3, where it is not an
+    // ADC pin at all: analogRead() logs "Pin 34 is not ADC pin!" and returns
+    // 0, so the JC3248W535EN seeded from the SAME constant on every boot and
+    // replayed the same "random" mascot lines, idle events and background
+    // choices in the same order, every time.
+    //
+    // esp_random() is the hardware TRNG. It needs no pin, so this stops being
+    // a per-board question, and it is a better seed than a floating input was
+    // on the boards where the old line worked. Nothing security-relevant
+    // depends on random() -- MeshCrypto and Security use esp_fill_random()
+    // and esp_random() directly -- so this is about the rain looking
+    // different on Tuesday, not about key material.
+    randomSeed(esp_random());
 
     // The backlight goes down while the radios come up, and back to your
     // setting once they are running.
