@@ -10,10 +10,16 @@ If you own a **CYD** instead, none of this is for you — go to
 
 [ESP Web Tools](https://esphome.github.io/esp-web-tools/) reads the chip ID
 over USB and refuses anything that does not match the manifest. Every manifest
-upstream declares `"chipFamily": "ESP32"`; this board is an **ESP32-S3**. A
-manifest for it is included here (`../web-flasher/manifest-jc3248.json`) and
-will work if you host the `web-flasher/` directory yourself — GitHub Pages is
-enough. It is not hosted anywhere by default.
+upstream declares `"chipFamily": "ESP32"`; this board is an **ESP32-S3**.
+
+There is a manifest for it — `../web-flasher/manifest-jc3248.json`, declaring
+`ESP32-S3` — and the board is listed in the flasher's picker. The release
+workflow builds the four files it names and publishes them alongside the other
+boards', so a tagged release has a working web flasher for this board. What it
+does NOT have is a host: nobody deploys this fork's `web-flasher/` anywhere. To
+use it you would have to serve that directory yourself, from a release's
+artifacts rather than from a plain checkout — the `.bin` files are build
+output and are not in the repo under those names.
 
 ## Flash it
 
@@ -69,6 +75,11 @@ and accept that the board resets when you connect.
 | `jc3248/partitions.bin` | `0x8000` | partition table — two 1.92 MB OTA app slots |
 | `jc3248/boot_app0.bin` | `0xe000` | OTA data: boot the first slot |
 | `jc3248/firmware.bin` | `0x10000` | the firmware |
+
+`VERSION.txt` in `jc3248/` records exactly which commit these were built from
+and the SHA-256 of each file. They are a snapshot: they do not rebuild
+themselves when the source beside them changes, so if that version looks old
+against the repo, build from source instead.
 
 Settings, PINs and mesh pairings live in NVS at `0x9000`, which none of the
 above overwrite — so this is safe to re-run over an existing install. Do **not**

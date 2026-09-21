@@ -1,0 +1,20 @@
+# Prebuilt snapshot — Guition JC3248W535EN
+
+These binaries are a SNAPSHOT, not a moving target. They were built
+from the commit named below and do not update themselves when the
+source next to them changes. If you want the newest code, build it:
+
+    pio run -e jc3248 -t upload
+
+A tagged release rebuilds these from that tag and attaches them,
+so the copies on a release are always current for that release.
+
+version   v1.15.0-13-g271bbfb
+env       jc3248
+built     2026-09-21T03:58:10+02:00
+
+sha256:
+  boot_app0.bin    f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0
+  bootloader.bin   1051ac3e564bb9368a635af94a219d01c6263dc7a89a5e132bd01fef925026a2
+  firmware.bin     8c88037d882d5e6b3a96fbb4b46a472794a69d1ac91c9988f3d2bebfd5bafc30
+  partitions.bin   53b39ac69f21abb9b90559315ea6cb0ab00216639cdccf2fec5c61d04e0aa970
