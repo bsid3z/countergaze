@@ -434,9 +434,17 @@ static void drawCrashCard(TFT_eSPI& t) {
 #define TOUCH_CS   33
 #endif
 #define TOUCH_IRQ  36
+#if defined(JC3248)
+// AXS15231B capacitive touch on the Guition JC3248W535EN -- its own I2C bus,
+// nowhere near the CYD's 33/32/25. See include/jc3248_user_setup.h.
+#define CAP_SDA    TOUCH_SDA_PIN
+#define CAP_SCL    TOUCH_SCL_PIN
+#define CAP_RST    TOUCH_RST_PIN
+#else
 #define CAP_SDA    33
 #define CAP_SCL    32
 #define CAP_RST    25
+#endif
 // Backlight brightness (Settings menu): all three boards' backlight
 // pins are driven at boot regardless of which one is actually wired
 // (see the digitalWrite(HIGH) comment in setup() — same reasoning
@@ -444,6 +452,18 @@ static void drawCrashCard(TFT_eSPI& t) {
 // whichever one is real without needing to know which board this is.
 // AWOK's BL sits on GPIO32; the other boards' pins (21, 27) are simply
 // unused GPIOs on AWOK, so driving all three is harmless.
+// Every board but one drives all three pins below and lets the unwired two
+// do nothing. That trick does not survive the move to an ESP32-S3: GPIO21 is
+// QSPI D0 on the JC3248W535EN -- a 5 kHz PWM on it takes the DISPLAY out, not
+// a backlight -- and 27 and 32 fall in the S3's flash/PSRAM pin range, where
+// the same stray PWM would take out the frame buffer. So that board reaches
+// its backlight (GPIO1, its own LEDC channel, set up in jc3248_panel.cpp)
+// through here instead, and never touches the three.
+#if defined(JC3248)
+  #define BL_WRITE_ALL(duty) Jc3248Panel::setBacklight((uint8_t)(duty))
+#else
+  #define BL_WRITE_ALL(duty) do {            ledcWrite(BL_CH_ORIG, (duty));         ledcWrite(BL_CH_CAP,  (duty));         ledcWrite(BL_CH_AWOK, (duty));     } while (0)
+#endif
 #define BL_PIN_ORIG 21
 #define BL_PIN_CAP  27
 #define BL_PIN_AWOK 32
@@ -668,8 +688,17 @@ static bool rawReadResistive(int16_t& a, int16_t& b);
 // (rotation 1). Not const: overwritten at boot if a saved calibration
 // exists (see loadOrDefaultCal()/TouchCal), and by the long-press
 // calibration flow (see checkCalibrationTrigger()).
+#if defined(JC3248)
+// The AXS15231B reports in panel pixels already -- 0..320 across, 0..480
+// down -- rather than in a controller-private range the way the CST816 does,
+// so the defaults ARE the panel and a fresh board is usable untouched. The
+// calibration flow still overwrites these if somebody runs it.
+static uint16_t CAP_NX_MIN = 0,   CAP_NX_MAX = 320;
+static uint16_t CAP_NY_MIN = 0,   CAP_NY_MAX = 480;
+#else
 static uint16_t CAP_NX_MIN = 32,  CAP_NX_MAX = 166;
 static uint16_t CAP_NY_MIN = 10,  CAP_NY_MAX = 308;
+#endif
 // Resistive XPT2046 raw ADC range — same idea, factory default was a
 // flat 200-3800 for both axes; not const for the same reason.
 static uint16_t RAW_X_MIN = 200, RAW_X_MAX = 3800;
@@ -1118,9 +1147,7 @@ static bool s_screenDimmed = false;
 
 static void applyBrightness() {
     uint8_t duty = s_screenDimmed ? Settings::dimLevel() : Settings::brightness();
-    ledcWrite(BL_CH_ORIG, duty);
-    ledcWrite(BL_CH_CAP,  duty);
-    ledcWrite(BL_CH_AWOK, duty);
+    BL_WRITE_ALL(duty);
 }
 
 // 240, 160 or 80 MHz. Never lower: the radio needs an 80 MHz APB clock, and
@@ -1541,7 +1568,11 @@ static const uint16_t    NUDGE_COUNT_S  = 30;
 // The update a nudge started, driven from the UPDATE state's tick in place
 // of the taps the manual flow takes. The shared network is used once and
 // wiped the moment it has been handed to the radio.
-static struct {
+// Named, rather than an anonymous struct, only so `s_auto = {}` below
+// compiles: GCC 8 in C++17 mode will not convert {} to an unnamed type, and
+// [env:jc3248] builds at C++17 because the rasterizer it draws through
+// (gfx/TFT_eSPI.h) uses inline statics. Identical in every other build.
+static struct AutoUpdate {
     bool     active = false, connected = false, installed = false, haveCreds = false;
     uint32_t failAt = 0;
     char     ssid[MeshMsg::WIFI_SSID_MAX + 1] = "";
@@ -1596,7 +1627,7 @@ static const char* updateRefusedWhy() {
 }
 
 static void startNudgedUpdate() {
-    s_auto = {};
+    s_auto = AutoUpdate{};   // named type spelled out: see the struct's comment
     if (!OtaWifi::hasSaved())
         s_auto.haveCreds = MeshTalk::takeNudgeWifi(s_nudge, s_auto.ssid, s_auto.pass);
     if (!OtaWifi::hasSaved() && !s_auto.haveCreds) {
@@ -2103,11 +2134,21 @@ void setup() {
 // Not on AWOK (TOUCH_CS there) and not on either RL Phantom, where GPIO21 is
 // the capacitive controller's INTERRUPT line. Driving it high at boot is the
 // same mistake as the LEDC attach further down, just earlier.
-#if !defined(AWOK) && !defined(RLPHANTOM) && !defined(RLPHANTOM_R)
+//
+// And not on the JC3248W535EN, where all three are actively harmful and two
+// are fatal. GPIO21 is QSPI D0 -- a display data lane, held high against the
+// panel's own driver. Worse, this is an ESP32-S3, and on that chip GPIO26-32
+// ARE THE INTERNAL SPI FLASH AND PSRAM PINS: 27 and 32 both land inside that
+// range, so these two lines reconfigure the bus the running program is
+// executing from. Confirmed on hardware -- it boot looped on the interrupt
+// watchdog, every boot, before reaching tft.init().
+#if !defined(AWOK) && !defined(RLPHANTOM) && !defined(RLPHANTOM_R) && !defined(JC3248)
     pinMode(21, OUTPUT); digitalWrite(21, HIGH);
 #endif
+#if !defined(JC3248)
     pinMode(27, OUTPUT); digitalWrite(27, HIGH);
     pinMode(32, OUTPUT); digitalWrite(32, HIGH);  // AWOK's real BL pin; unused GPIO on the other two boards
+#endif
 
     tft.init();
 
@@ -2157,14 +2198,18 @@ void setup() {
 // TOUCH_CS on AWOK, and the capacitive controller's INTERRUPT line on the RL
 // Phantom. Driving a 5 kHz PWM onto either is the kind of fault that looks
 // like dead touch, which is exactly how it presented on the Phantom.
-#if !defined(AWOK) && !defined(RLPHANTOM) && !defined(RLPHANTOM_R)
+// ...and on the JC3248W535EN none of the three is a backlight at all; see
+// BL_WRITE_ALL above for what attaching them there would actually break.
+#if !defined(AWOK) && !defined(RLPHANTOM) && !defined(RLPHANTOM_R) && !defined(JC3248)
     ledcSetup(BL_CH_ORIG, 5000, 8);
     ledcAttachPin(BL_PIN_ORIG, BL_CH_ORIG);
 #endif
+#if !defined(JC3248)
     ledcSetup(BL_CH_CAP, 5000, 8);
     ledcAttachPin(BL_PIN_CAP, BL_CH_CAP);
     ledcSetup(BL_CH_AWOK, 5000, 8);
     ledcAttachPin(BL_PIN_AWOK, BL_CH_AWOK);
+#endif
     applyBrightness();
     // A saved core clock has to be restored here too, or the setting silently
     // reverts to 240 MHz on every reboot and looks like it never took.
@@ -2191,9 +2236,7 @@ void setup() {
         // radio start below: WiFi's RF calibration plus a full backlight is
         // more than a weak USB port holds, and the first run of this check
         // browned the Phantom out into a second boot.
-        ledcWrite(BL_CH_ORIG, 24);
-        ledcWrite(BL_CH_CAP,  24);
-        ledcWrite(BL_CH_AWOK, 24);
+        BL_WRITE_ALL(24);
         tft.fillScreen(Theme::BG);
         tft.setTextSize(1);
         tft.setTextWrap(false);
@@ -2253,7 +2296,18 @@ void setup() {
     // and can go anywhere after the display is up.
     FramePush::begin();
 
-#if defined(CYD35)
+#if defined(JC3248)
+    // AXS15231B capacitive touch, I2C 0x3B -- the same silicon as the display
+    // controller, on its own I2C bus. Unlike the CYD there is no resistive
+    // part on this board to fall back to, so a failed probe means no touch at
+    // all rather than a different driver: say so and carry on, since every
+    // other thing this device does still works without a finger on it.
+    CapTouch::begin(CAP_SDA, CAP_SCL, CAP_RST);
+    usingCapTouch = CapTouch::probe();
+    Serial.println(usingCapTouch
+        ? "JC3248W535EN -- AXS15231B capacitive touch on I2C 0x3B."
+        : "JC3248W535EN -- NO touch controller answered at 0x3B. Display only.");
+#elif defined(CYD35)
     // The standalone XPT2046_Touchscreen library (own SPIClass, own
     // IRQ pin) produced constant garbage reads and a free-running IRQ
     // here -- not a wrong-pin problem, a second SPI master fighting
@@ -2417,9 +2471,7 @@ void setup() {
     // browned out at exactly this point on every boot -- three seconds a
     // cycle, forever -- off any supply short of a powered hub. The backlight
     // is the one large load that nobody misses for a second at boot.
-    ledcWrite(BL_CH_ORIG, 24);
-    ledcWrite(BL_CH_CAP,  24);
-    ledcWrite(BL_CH_AWOK, 24);
+    BL_WRITE_ALL(24);
 
     // The black box, before the radios: this boot's record -- with the crash
     // in it when there was one -- then the log as the last boot left it, so
@@ -2523,6 +2575,11 @@ static void runPrimBench() {
     primTime("int mul+add",         20000, [&](uint32_t i){ sink += i * 17u + 3u; });
     // The library's own versions of the four the sprite subclass takes over,
     // so the gain is on the record next to the cost. And then the proof.
+    //
+    // Only where TFT_eSprite IS the real library's. On the JC3248W535EN the
+    // sprite is gfx/TFT_eSPI.h's: one set of primitives, no second set to
+    // race them against, and no 6-argument drawChar to call.
+#if SQW_REAL_TFT_ESPI
     primTime("drawPixel (library)",  20000, [&](uint32_t i){ f.basePixel((int)(i & 255), (int)((i >> 4) & 127), (uint16_t)i); });
     primTime("drawFastVLine 200 (library)", 2000, [&](uint32_t i){ f.baseVLine((int)(i & 255), 0, 200, (uint16_t)i); });
     primTime("drawLine 100x60 (library)",   1000, [&](uint32_t i){ f.baseLine((int)(i & 127), 0, (int)(i & 127) + 100, 60, (uint16_t)i); });
@@ -2532,6 +2589,9 @@ static void runPrimBench() {
     primTime("11 chars size 2 (fast)",       300, [&](uint32_t i){ for (int k = 0; k < 11; k++) f.drawChar((int)(i & 63) + k * 12, (int)((i >> 1) & 127), (uint16_t)('A' + k), Theme::CYAN, Theme::BG, 2); });
     const int bad = f.selfCheck(Serial);
     Serial.printf("[check] %s\n", bad == 0 ? "every fast path is pixel-identical to the library" : "FAST PATHS DIFFER -- do not ship");
+#else
+    Serial.println("[check] one set of primitives on this board -- nothing to compare");
+#endif
     primTime("index arithmetic only",20000, [&](uint32_t i){ sink += (uint32_t)((int)(i & 255) + (int)((i >> 4) & 127)); });
     Serial.printf("[prim] done (%lu)\n", (unsigned long)sink);
 }

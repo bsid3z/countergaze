@@ -2,6 +2,24 @@
 
 > Surveillance-device detector for the ESP32-2432S028R ("Cheap Yellow Display").
 
+> ### This is a fork. SquachWatch is skizzophrenic's work.
+>
+> Everything below — the firmware, the detection research, Squachy, SquachMesh,
+> the SquachWare aesthetic, the emulator, every screen in the demo — was written
+> by **[skizzophrenic](https://github.com/skizzophrenic)** (Talking Sasquach).
+> Upstream is **[skizzophrenic/SquachWatch-CYD](https://github.com/skizzophrenic/SquachWatch-CYD)**
+> and the project's home is **[talkingsasquach.com](https://talkingsasquach.com)**.
+> If SquachWatch is useful to you, support it there — not here.
+>
+> This fork exists for exactly one reason: to add the **Guition JC3248W535EN**,
+> a 3.5" ESP32-S3 board that upstream cannot run on. Every other board behaves
+> identically to upstream, the name and the branding are unchanged, and no
+> feature has been added or removed. See
+> **[Changes from upstream](#changes-from-upstream)** for the complete list and
+> **[docs/JC3248W535EN.md](docs/JC3248W535EN.md)** for how the port works.
+>
+> GPL-3.0, same as upstream.
+
 SquachWatch-CYD sniffs the 2.4 GHz airwaves for known wireless signatures
 of Flock Safety cameras, Axon body cameras, recording glasses, card
 skimmers, AirTags, drones, proximity beacons and pentest hardware. It runs
@@ -69,12 +87,33 @@ otherwise see all week. It is one tap away in `DETECTION FILTER`.
 
 ## Hardware
 
-- **ESP32-2432S028R** ("Cheap Yellow Display" / CYD) — about $15.
+- **Sunton ESP32-2432S028R** ("Cheap Yellow Display" / CYD) — about $15.
   Built-in 320×240 ILI9341 TFT, XPT2046 resistive touch, and an
   onboard microSD card slot.
 
 That's it. No buzzer, no GPS, no extra modules. The CYD is the
 whole device.
+
+### Every supported board
+
+"CYD" properly means the Sunton ESP32-2432S028R and its siblings. The Guition
+board at the bottom is **not** a CYD and is not compatible with a CYD build —
+different manufacturer, different chip, different display bus. It is listed
+here because this fork is the thing that added it.
+
+| Board | Screen | Display driver | Touch | Chip | Build env |
+|---|---|---|---|---|---|
+| Sunton ESP32-2432S028R (CYD) | 2.8" 240×320 | ST7789, SPI | XPT2046 resistive | ESP32 | `cyd` |
+| Sunton ESP32-2432S028R (CYD) | 2.8" 240×320 | ILI9341, SPI | XPT2046 resistive | ESP32 | `cyd-ili9341` |
+| Sunton ESP32-2432S024R (RL Phantom) | 2.4" 240×320 | ILI9341, SPI | XPT2046 resistive | ESP32 | `rlphantom-r` |
+| Sunton ESP32-2432S024C (RL Phantom) | 2.4" 240×320 | ILI9341, SPI | CST820 capacitive | ESP32 | `rlphantom` |
+| AWOK ESP32-Marauder V6.1 | 2.4" 240×320 | ILI9341, SPI | XPT2046, shared bus | ESP32 | `awok` |
+| Sunton ESP32-3248S035 | 3.5" 480×320 | ST7796, SPI | XPT2046, shared bus | ESP32 | `cyd35` |
+| **Guition JC3248W535EN** | **3.5" 320×480** | **AXS15231B, QSPI** | **AXS15231B capacitive** | **ESP32-S3** | **`jc3248`** |
+
+The two 2.8" rows are the same physical board — it shipped with either panel,
+and the two cannot be told apart without flashing one and looking. `cyd35` is
+frozen upstream and boot-loops on real hardware; it is not recommended.
 
 ## Web Flash
 
@@ -85,6 +124,13 @@ from your browser:
 
 Works in Firefox, Chrome, Edge, or Brave on desktop. Pick your board (2.8" CYD,
 AWOK 2.4" or RL Phantom 2.4"), plug in, click Connect & Install, done.
+
+**The Guition JC3248W535EN is not on the web flasher,** upstream's or this
+fork's. Every manifest there declares `"chipFamily": "ESP32"`, and that board is
+an ESP32-S3; ESP Web Tools reads the chip ID over USB and refuses. This is not a
+manifest typo — the other boards' binaries are Xtensa LX6 code that would not
+boot on an LX7 even if it did flash. JC3248W535EN owners build from source, one
+command, below.
 
 ## Build
 
@@ -105,6 +151,40 @@ The first build pulls the TFT_eSPI, XPT2046, and NimBLE-Arduino
 libraries; after that it's incremental.
 
 A full beginner-friendly walkthrough is in [docs/BUILD.md](docs/BUILD.md).
+
+### Guition JC3248W535EN
+
+The reason this fork exists. Three commands:
+
+```sh
+git clone https://github.com/bsid3z/countergaze
+cd countergaze
+pio run -e jc3248 -t upload
+```
+
+`-e jc3248` is required — a bare `pio run -t upload` builds the CYD boards and
+will not produce something this board can run.
+
+Two things about this board specifically, both of which will otherwise cost you
+an evening:
+
+- **Press the RESET button after flashing.** esptool's automatic post-flash
+  reset does not work reliably over this board's native USB, so until you reset
+  it by hand the board keeps running the *previous* firmware. A flash that
+  looks like it did nothing has almost always just not restarted yet.
+- **If esptool cannot connect,** hold **BOOT**, tap **RESET**, release **BOOT**,
+  and flash again. That puts it in the ROM bootloader, which always answers.
+
+USB serial debugging is **off** by default on this board. The ESP32-S3's
+USB Serial/JTAG unit resets the chip whenever a host opens the port, and with
+nothing draining the CDC buffer the firmware blocks in `setup()` — which is why
+an earlier build ran on a PC but hung on a power bank. For a console, build the
+debug variant instead:
+
+```sh
+pio run -e jc3248-debug -t upload
+pio device monitor -e jc3248-debug
+```
 
 ## Usage
 
@@ -450,12 +530,62 @@ SquachWatch-CYD/
     └── web/                      (the browser build)
 ```
 
+## Changes from upstream
+
+The complete list, against
+[skizzophrenic/SquachWatch-CYD](https://github.com/skizzophrenic/SquachWatch-CYD).
+No feature was added or removed, and no board upstream supports behaves
+differently.
+
+**New: the Guition JC3248W535EN.** `[env:jc3248]` and `[env:jc3248-debug]`,
+plus `src/jc3248_panel.cpp` and `include/jc3248_panel.h` — the QSPI transport
+for its AXS15231B panel, which TFT_eSPI cannot drive at all. Drawing goes
+through the portable rasterizer that already existed in `sim/` for the web
+emulator; this fork moved it to `gfx/` so the firmware and the emulator share
+one copy, and taught it to push to real glass. `src/cap_touch.cpp` gained the
+AXS15231B's I2C touch protocol alongside the existing CST816. Full write-up in
+[docs/JC3248W535EN.md](docs/JC3248W535EN.md).
+
+**Fixed: `fillRect` drew one pixel at a time.** In the shared rasterizer,
+`fillRect` → `drawFastHLine` → a *virtual* `drawPixel` per pixel. A new
+`fillSpan` writes the row directly. This helps every board and the emulator
+equally; on the JC3248W535EN it took frame drawing from 225 ms to 86 ms.
+
+**Fixed: three GPIO writes that are fatal on an ESP32-S3.** `setup()` drove
+pins 21, 27 and 32 high to cover every board's possible backlight. On an S3,
+GPIO26–32 are the internal flash and PSRAM lines, so this reconfigured the bus
+the CPU was running from — an interrupt-watchdog boot loop before `tft.init()`.
+Now skipped on that board; untouched everywhere else.
+
+**Changed, mechanically:** `sim/TFT_eSPI.h` and its font tables moved to
+`gfx/` (one copy, two consumers — `sim/Makefile` and `test/Makefile` follow it);
+`FastSprite` and `FramePush` now gate on whether the real TFT_eSPI is present
+rather than on `ARDUINO_ARCH_ESP32`, since the S3 build has the architecture but
+not the library; `SdLog::begin()` returns early on the JC3248W535EN, which has
+no usable card slot and whose fallback path would have claimed GPIO19 — USB D−
+on an S3; one anonymous struct in `main.cpp` was given a name so it compiles at
+C++17, which the rasterizer needs. CI builds the new board.
+
+**Deliberately unchanged:** the mesh key-derivation salt
+(`"SquachWatch/msg/v1"`), the `"squachwatch"` NVS namespace, and the
+`squachwatch-<day>.log` filename. All three contain the project's name but are
+protocol or persisted state — renaming them would break mesh interop with
+upstream boards, orphan saved settings, and fail `MeshCrypto::selfTest` at boot.
+
 ## License
 
 **GNU General Public License v3.0 (GPL-3.0).** See [LICENSE](LICENSE).
 
+Copyright remains with the original authors. This fork is redistributed under
+the same licence, as GPL-3.0 requires.
+
 ## Credits
 
+- **SquachWatch itself — all of it — is by
+  [skizzophrenic](https://github.com/skizzophrenic) (Talking Sasquach).**
+  The firmware, the detection research, Squachy, SquachMesh, the SquachWare
+  look, the emulator and the web flasher are his work. This fork adds one
+  board and changes nothing else.
 - Flock Safety OUI research: [@NitekryDPaul](https://x.com/NitekryDPaul),
   DeFlockJoplin, [`colonelpanichacks/flock-you`](https://github.com/colonelpanichacks/flock-you)
   (MIT).

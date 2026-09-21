@@ -32,9 +32,13 @@ class TFT_eSPI;
 // record was keyed by panel row rather than by row-within-the-sprite: it
 // pushes two bands a frame and a per-sprite record would have had the second
 // band reading the first one's rows. AWOK stays out until somebody has
-// watched its screen.
+// watched its screen. JC3248 is out by mechanism rather than by agreement:
+// this reaches into TFT_eSPI's own SPI registers mid-transaction, and on
+// that board TFT_eSPI is not driving the panel at all -- a four-lane QSPI
+// AXS15231B is, through gfx/TFT_eSPI.h and jc3248_panel.cpp. There are no
+// registers here to poke.
 #if defined(ARDUINO_ARCH_ESP32) && (defined(CYD) || defined(CYD35)) && \
-    !defined(AWOK)
+    !defined(AWOK) && !defined(SQW_HW_PANEL)
   #define SQW_FRAME_PUSH 1
 #else
   #define SQW_FRAME_PUSH 0

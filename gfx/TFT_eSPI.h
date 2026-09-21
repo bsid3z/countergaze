@@ -45,6 +45,46 @@
 #include "font16_data.h"
 #include "gfxff/gfxfont.h"
 
+// ---- where this rasterizer is the REAL display driver ------------------
+//
+// On the Guition JC3248W535EN the panel is an AXS15231B behind a four-lane
+// QSPI bus, which TFT_eSPI cannot drive -- so this file is not a preview of
+// the firmware's drawing there, it IS the firmware's drawing, and the
+// finished buffer goes to the glass through jc3248_panel.h. Everything in
+// this block is inert in the emulator, which defines none of it.
+//
+// Two frame buffers at 320x480x2 bytes is 614KB, which does not exist in
+// this chip's 512KB of internal SRAM and would not be worth spending on a
+// frame buffer if it did -- WiFi and BLE want that space. The board carries
+// 8MB of PSRAM, so both buffers live there.
+#if defined(SQW_HW_PANEL)
+  #include <esp_heap_caps.h>
+  #include "jc3248_panel.h"
+
+  template <class T>
+  struct PsramAlloc {
+      using value_type = T;
+      PsramAlloc() = default;
+      template <class U> PsramAlloc(const PsramAlloc<U>&) noexcept {}
+      T* allocate(size_t n) {
+          // Fall back to internal RAM rather than returning null: a small
+          // sprite may well fit there, and a null here is a crash inside
+          // std::vector with no useful backtrace.
+          void* p = heap_caps_malloc(n * sizeof(T), MALLOC_CAP_SPIRAM);
+          if (!p) p = heap_caps_malloc(n * sizeof(T), MALLOC_CAP_8BIT);
+          return (T*)p;
+      }
+      void deallocate(T* p, size_t) noexcept { heap_caps_free(p); }
+      template <class U> bool operator==(const PsramAlloc<U>&) const noexcept { return true; }
+      template <class U> bool operator!=(const PsramAlloc<U>&) const noexcept { return false; }
+  };
+  using PixBuf = std::vector<uint16_t, PsramAlloc<uint16_t>>;
+#else
+  // The emulator allocates from the host's ordinary heap, and its harness
+  // reads the buffer back as a plain std::vector<uint16_t>.
+  using PixBuf = std::vector<uint16_t>;
+#endif
+
 // The GLCD font's cell, matching the real library exactly. Five glyph
 // columns plus one blank spacer column (6 across), and EIGHT rows, not
 // seven: TFT_eSPI's fontdata[1].height is 8 and its drawChar opens a
@@ -88,7 +128,26 @@ public:
     }
     virtual ~TFT_eSPI() {}
 
+#if defined(SQW_HW_PANEL)
+    // Brings the panel up and adopts its geometry, so width()/height() --
+    // which every screen in this firmware lays itself out from -- report
+    // the real glass rather than the constructor's default.
+    void init() {
+        if (!Jc3248Panel::begin()) return;
+        _w = Jc3248Panel::width();
+        _h = Jc3248Panel::height();
+        _buf.assign((size_t)_w * _h, 0x0000);
+    }
+
+    // Pushes this buffer to the panel. Only the handful of places that draw
+    // straight to `tft` rather than into the frame sprite need it -- boot
+    // and the fatal-error screens -- so it is called from fillScreen()
+    // rather than asked of every caller.
+    void flush() { Jc3248Panel::pushFrame(_buf.data(), _w, _h, 0, 0); }
+#else
     void init() {}
+    void flush() {}
+#endif
     void begin() { init(); }
     // The panel is landscape unless a harness opts in: then an odd/even
     // rotation change swaps the two sides, the way the real panel does, so
@@ -96,6 +155,18 @@ public:
     // the screenshot tool both assume 320x240.
     static inline bool rotates = false;
     void setRotation(uint8_t r) {
+#if defined(SQW_HW_PANEL)
+        // The panel rotates for real here, and this buffer has to follow it
+        // or every frame after a rotate is pushed at the wrong stride.
+        Jc3248Panel::setRotation(r);
+        const int pw = Jc3248Panel::width(), ph = Jc3248Panel::height();
+        if (pw != _w || ph != _h) {
+            _w = pw; _h = ph;
+            _buf.assign((size_t)_w * _h, 0x0000);
+        }
+        _rotation = r;
+        return;
+#endif
         // Odd rotations are landscape on the CYD; the shape follows that.
         if (rotates && ((r & 1) != 0) != (_w > _h) && _w != _h) {
             const int t = _w; _w = _h; _h = t;
@@ -107,7 +178,11 @@ public:
     int16_t width()  const { return _w; }
     int16_t height() const { return _h; }
     void invertDisplay(bool) {}
+#if defined(SQW_HW_PANEL)
+    void fillScreen(uint32_t color) { fillRect(0, 0, _w, _h, color); flush(); }
+#else
     void fillScreen(uint32_t color) { fillRect(0, 0, _w, _h, color); }
+#endif
 
     // ---- the 6 real virtuals, targeting _buf ----------------------
     virtual void drawPixel(int32_t x, int32_t y, uint32_t color) {
@@ -210,14 +285,26 @@ public:
 
     // ---- shape primitives, built on the virtuals above (same split
     // real TFT_eSPI uses) ------------------------------------------
-    void drawFastHLine(int32_t x, int32_t y, int32_t w, uint32_t color) {
+    // One horizontal run of one colour. Every solid fill in this library
+    // bottoms out here, so it is the one place worth making fast: the
+    // sprite below overrides it to write the row straight into its buffer.
+    //
+    // That matters on hardware and not in the emulator. On the desktop a
+    // drawPixel per pixel costs nothing anybody notices; on the ESP32-S3,
+    // with the frame buffer in PSRAM, a full-screen fill through the
+    // virtual per-pixel path measured 225 ms -- the whole frame budget,
+    // spent on rectangles.
+    virtual void fillSpan(int32_t x, int32_t y, int32_t w, uint32_t color) {
         for (int32_t i = 0; i < w; i++) drawPixel(x + i, y, color);
+    }
+    void drawFastHLine(int32_t x, int32_t y, int32_t w, uint32_t color) {
+        fillSpan(x, y, w, color);
     }
     void drawFastVLine(int32_t x, int32_t y, int32_t h, uint32_t color) {
         for (int32_t i = 0; i < h; i++) drawPixel(x, y + i, color);
     }
     void fillRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color) {
-        for (int32_t j = 0; j < h; j++) drawFastHLine(x, y + j, w, color);
+        for (int32_t j = 0; j < h; j++) fillSpan(x, y + j, w, color);
     }
     // Framebuffer push, for backgrounds that render pixels on the CPU.
     // The real library byte-swaps on the way out when asked; here the
@@ -417,12 +504,12 @@ public:
     void writedata(uint8_t) {}
 
     // ---- sim-only access for the render harness ---------------------
-    const std::vector<uint16_t>& pixelsRGB565() const { return _buf; }
+    const PixBuf& pixelsRGB565() const { return _buf; }
 
 protected:
     int _w, _h;
     uint8_t _rotation = 0;
-    std::vector<uint16_t> _buf;
+    PixBuf _buf;
     int32_t _winX0 = 0, _winY0 = 0, _winX1 = 0, _winY1 = 0, _winCurX = 0, _winCurY = 0;
 
     int32_t cursor_x = 0, cursor_y = 0;
@@ -504,12 +591,24 @@ public:
     // real device's equivalent of an SPI DMA push to the panel; here
     // it's just a straight copy into the parent's own in-memory buffer,
     // which is exactly what the sim harness reads out to PNG.
+#if defined(SQW_HW_PANEL)
+    // On the JC3248W535EN this is the frame reaching the glass, not a copy
+    // between two in-memory buffers: the sprite is already RGB565 in the
+    // layout the panel wants, so it goes out over QSPI as-is. Routing it
+    // through the parent's buffer first would cost a 307KB PSRAM copy and a
+    // drawPixel call per pixel -- 153,600 of them -- for nothing.
+    void pushSprite(int32_t x, int32_t y) {
+        if (!_created) return;
+        Jc3248Panel::pushFrame(_buf.data(), _w, _h, x, y);
+    }
+#else
     void pushSprite(int32_t x, int32_t y) {
         if (!_parent || !_created) return;
         for (int32_t j = 0; j < _h; j++)
             for (int32_t i = 0; i < _w; i++)
                 _parent->drawPixel(x + i, y + j, _buf[(size_t)j * _w + i]);
     }
+#endif
 
     // Viewport support: main.cpp's CYD35 two-pass half-height render
     // path calls this to redirect drawing into the top/bottom half of a
@@ -572,6 +671,37 @@ public:
     uint16_t readPixel(int32_t x, int32_t y) override {
         if (x < 0 || y < 0 || x >= _w || y >= _h) return 0;
         return _buf[(size_t)y * _w + x];
+    }
+
+    // drawPixel's clipping, done once for a whole run instead of once per
+    // pixel, and then a straight walk along the row. Every branch below
+    // mirrors a branch in drawPixel above: a pixel this writes is a pixel
+    // that one would have written, in the same colour -- the 8bpp
+    // quantisation included, which is why quantise332 is hoisted out of the
+    // loop rather than skipped.
+    void fillSpan(int32_t x, int32_t y, int32_t w, uint32_t color) override {
+        if (w <= 0) return;
+        int32_t x0 = x, x1 = x + w;   // half-open
+        if (_vpActive) {
+            if (_vpDatum) {
+                x0 += _vpX; x1 += _vpX; y += _vpY;
+                if (y < 0) return;
+            } else {
+                if (y < _vpY) return;
+                if (x0 < _vpX) x0 = _vpX;
+            }
+            if (y >= _vpH + _vpY) return;
+            if (x1 > _vpW + _vpX) x1 = _vpW + _vpX;
+        }
+        if (y < 0 || y >= _h) return;
+        if (x0 < 0) x0 = 0;
+        if (x1 > _w) x1 = _w;
+        if (x1 <= x0) return;
+
+        const uint16_t c = (_depth == 8) ? quantise332((uint16_t)color)
+                                         : (uint16_t)color;
+        uint16_t* p = _buf.data() + (size_t)y * _w + x0;
+        for (int32_t i = x0; i < x1; i++) *p++ = c;
     }
 
 protected:

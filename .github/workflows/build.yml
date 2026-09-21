@@ -61,6 +61,17 @@ jobs:
       - name: Build
         run: pio run
 
+      # jc3248 is NOT in default_envs -- it has never run on real hardware --
+      # but it is built here, unlike cyd35, and the difference is deliberate.
+      # cyd35 is frozen, so a green build tells you nothing you wanted to
+      # know. This board is the opposite: it is the only environment that
+      # compiles gfx/TFT_eSPI.h as a real display driver rather than as the
+      # emulator's preview, so it is what catches a rasterizer or shared-
+      # header change that the three shipping boards cannot see. It also
+      # builds for a different chip (ESP32-S3) and a different C++ standard.
+      - name: Build the JC3248W535EN port
+        run: pio run -e jc3248
+
   tests:
     # The decoders are pure arithmetic over byte buffers, so they run on a
     # desktop with no board and no display. Worth a job of their own: the

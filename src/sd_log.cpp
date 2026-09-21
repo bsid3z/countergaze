@@ -35,6 +35,26 @@ static const uint8_t SD_MAX_FILES = 2;
 
 bool SdLog::begin() {
     if (_ready) return true;
+#if defined(JC3248)
+    // The JC3248W535EN gets no SD at all, and this returns before touching a
+    // single pin. Every branch below is wired for an ESP32's GPIO map, and on
+    // this board's ESP32-S3 the fallback one is actively destructive: it
+    // calls SPI.begin(18, 19, 23, 5), and GPIO19 is USB D- on an S3. Claiming
+    // it takes out the USB CDC console -- the one channel anybody bringing
+    // this board up is reading -- to mount a card that is not there.
+    //
+    // Not there, on the evidence: this module's own vendor pin list puts the
+    // card on 10/11/12/13, which is the same 11 and 12 its touch controller
+    // resets and interrupts on. Two devices cannot both own those.
+    //
+    // There is also a precedent worth respecting. platformio.ini records the
+    // 3.5" board's NimBLE panic following two failed SD mounts, with the
+    // cheapest suggested probe being to stub this very function out. Starting
+    // a new board on the far side of that is free.
+    Serial.println("[sd] no card slot on this board: nothing will be logged");
+    _ready = false;
+    return false;
+#else
     Serial.printf("[sd] mounting: heap %lu, largest block %lu\n", (unsigned long)ESP.getFreeHeap(), (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 #if defined(CYD35)
     // (The RL Phantom used to land here too, and its SD card never worked as
@@ -98,6 +118,7 @@ bool SdLog::begin() {
     _ready = true;
     openDaily();
     return true;
+#endif  // JC3248
 }
 
 void SdLog::openDaily() {

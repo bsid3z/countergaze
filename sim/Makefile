@@ -38,6 +38,11 @@ SIM_DIR  := .
 SQUACHWATCH ?= ..
 SRC      := $(SQUACHWATCH)/src
 INC      := $(SQUACHWATCH)/include
+# The portable TFT_eSPI/TFT_eSprite rasterizer and its font tables. Shared
+# with the on-device build for boards whose panel the real TFT_eSPI cannot
+# drive (see [env:jc3248] in platformio.ini) -- one copy, two consumers, so
+# a drawing fix lands in the emulator and on the glass at the same time.
+GFX      := $(SQUACHWATCH)/gfx
 
 # Say so up front if the firmware tree is missing, rather than letting the
 # first compile fail on a header it cannot find. `make clean` is exempt:
@@ -54,7 +59,7 @@ CXX      ?= g++
 # shims here rather than to an ESP32 core that isn't installed.
 EXTRA_CXXFLAGS ?=
 CXXFLAGS := -std=c++17 -O1 -g -Wall -Wno-unused-parameter $(EXTRA_CXXFLAGS) \
-            -I$(SIM_DIR) -I$(INC) -DSQUACH_MESH=1
+            -I$(SIM_DIR) -I$(GFX) -I$(INC) -DSQUACH_MESH=1
 
 UI_SRCS  := $(SRC)/theme.cpp \
             $(SRC)/squachy.cpp \
@@ -173,7 +178,7 @@ WASM_OUT  := $(WASM_DIR)/squachsim.js
 # -DSQUACH_MESH=1 as the native build has it. It was missing, so the web
 # emulator compiled every SquachMesh screen out and never showed the feature
 # that every shipping board has had since v1.5.23.
-WASM_FLAGS := -std=c++17 -Os -I$(SIM_DIR) -I$(INC) -DSQUACH_MESH=1 \
+WASM_FLAGS := -std=c++17 -Os -I$(SIM_DIR) -I$(GFX) -I$(INC) -DSQUACH_MESH=1 \
               -Wno-unused-parameter \
               -include $(SIM_DIR)/Arduino.h \
               -include $(INC)/cyd_user_setup.h \
@@ -212,7 +217,7 @@ all: $(BIN) $(LIVE_BIN)
 live: $(LIVE_BIN)
 wasm: $(WASM_OUT)
 
-$(WASM_OUT): $(WASM_SRCS) $(wildcard $(SIM_DIR)/*.h) $(wildcard $(INC)/*.h)
+$(WASM_OUT): $(WASM_SRCS) $(wildcard $(SIM_DIR)/*.h) $(wildcard $(GFX)/*.h) $(wildcard $(INC)/*.h)
 	@command -v em++ >/dev/null || { echo "em++ not found -- run: source ~/emsdk/emsdk_env.sh"; exit 1; }
 	@mkdir -p $(WASM_DIR)
 	em++ $(WASM_FLAGS) -o $@ $(WASM_SRCS)

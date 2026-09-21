@@ -12,16 +12,19 @@
 #
 # Include path mirrors sim/Makefile: the sim directory comes first so
 # <Arduino.h> and friends resolve to its shims rather than to an ESP32
-# core that is not installed on a build machine.
+# core that is not installed on a build machine, and gfx/ supplies
+# <TFT_eSPI.h> -- the portable rasterizer, shared with the emulator and
+# with the JC3248W535EN firmware build, which shim_fidelity_test tests.
 
 SRC  := ../src
 INC  := ../include
 SIM  := ../sim
+GFX  := ../gfx
 OUT  := out
 
 CXX      ?= g++
 CXXFLAGS := -std=c++17 -O1 -g -Wall -Wextra -Wno-unused-parameter \
-            -I$(SIM) -I$(INC)
+            -I$(SIM) -I$(GFX) -I$(INC)
 
 TESTS := remote_id_test ibeacon_test signatures_test emitter_roundtrip_test ignore_list_test hacker_test pwnagotchi_test shim_fidelity_test squachmesh_test qwerty_test meshmsg_test device_info_test security_test emote_script_test blackbox_test bingo_test hunt_test bgretire_test autoquiet_test framepush_test
 
@@ -66,7 +69,7 @@ bgretire_test_SRCS := $(SRC)/settings.cpp
 hunt_test_SRCS               := $(SRC)/settings.cpp
 # Header-only, both: the colour arithmetic the overlapped frame push
 # builds its table from is inline in frame_push.h, and the shim under
-# test IS sim/TFT_eSPI.h.
+# test IS gfx/TFT_eSPI.h.
 framepush_test_SRCS          :=
 shim_fidelity_test_SRCS      :=
 

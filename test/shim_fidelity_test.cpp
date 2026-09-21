@@ -2,7 +2,7 @@
 //
 // This project decides geometry by measuring rendered emulator frames --
 // Squachy's scale, the pet's perch, the counter rows, the bubble headroom
-// were all settled by looking at sim output. That makes sim/TFT_eSPI.h a
+// were all settled by looking at sim output. That makes gfx/TFT_eSPI.h a
 // measuring instrument, and an instrument that disagrees with the hardware
 // is worse than no instrument: it produces confident wrong answers.
 //
@@ -76,7 +76,7 @@ int main() {
         ck("fontHeight(1) agrees", t.fontHeight(1) == 8);
         // Font 2 IS compiled in since v1.7.6 (LOAD_FONT2 in every user setup:
         // the speech bubbles are set in it), so the real fontdata[2].height
-        // is 16 and the shim renders it from sim/font16_data.h. This used to
+        // is 16 and the shim renders it from gfx/font16_data.h. This used to
         // assert 0 on both sides, with a note that it would stop holding the
         // moment anyone enabled LOAD_FONT2 -- which is what happened.
         ck("fontHeight(2) is 16 on both sides", t.fontHeight(2) == 16);

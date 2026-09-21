@@ -29,9 +29,20 @@
 // checksums of the whole buffer. PRIM on the console runs it.
 //
 // The emulator's sprite is a different class with none of these members, so
-// there this is a plain pass-through and nothing changes.
+// there this is a plain pass-through and nothing changes. The same is true
+// on the JC3248W535EN, which draws through that same class on real hardware
+// (see gfx/TFT_eSPI.h): SQW_HW_PANEL, not the architecture, is what says
+// whether the real library's internals are underneath.
 #pragma once
 #include <TFT_eSPI.h>
+
+// True only where TFT_eSprite is the real library's, with _img8/_dwidth and
+// the six virtuals this class overrides.
+#if defined(ARDUINO_ARCH_ESP32) && !defined(SQW_HW_PANEL)
+  #define SQW_REAL_TFT_ESPI 1
+#else
+  #define SQW_REAL_TFT_ESPI 0
+#endif
 
 class FastSprite : public TFT_eSprite {
 public:
@@ -44,20 +55,27 @@ public:
     // here or it reads straight off the end -- a LoadStoreError panic, found
     // on that board on 2026-09-20 and the reason FramePush::push() takes a
     // buffer and a size rather than a sprite.
-#if defined(ARDUINO_ARCH_ESP32)
+#if SQW_REAL_TFT_ESPI
     int32_t  bufW() const { return _dwidth; }
     int32_t  bufH() const { return _dheight; }
     uint8_t* buf()  const { return _img8; }
 #else
-    // The emulator's sprite is a different class and keeps none of those, but
-    // it has no fast push to feed either -- these exist so the one call site
-    // compiles there.
+    // The emulator's sprite -- and the JC3248's, which is the same class --
+    // keeps none of those, but has no fast push to feed either; these exist
+    // so the one call site compiles there.
     int32_t  bufW() { return width(); }
     int32_t  bufH() { return height(); }
     uint8_t* buf()  { return nullptr; }
+
+    // FAST on the console is answered everywhere, so clock.cpp needs no
+    // board #ifdef of its own. There is nothing to switch here -- the
+    // rasterizer's primitives are the only ones -- so it reports off and
+    // takes no action, which is the truth rather than a silent no-op.
+    static void setFast(bool) {}
+    static bool fast() { return false; }
 #endif
 
-#if defined(ARDUINO_ARCH_ESP32)
+#if SQW_REAL_TFT_ESPI
     // FAST OFF on the console: every override hands straight to the library,
     // so the two can be compared on one boot.
     static void setFast(bool on) { s_fast = on; }

@@ -1,6 +1,6 @@
 #include "fast_sprite.h"
 
-#if defined(ARDUINO_ARCH_ESP32)
+#if SQW_REAL_TFT_ESPI
 
 // 16-bit colour to the sprite's 8-bit byte: the library's own expression.
 bool FastSprite::s_fast = true;
@@ -253,4 +253,4 @@ int FastSprite::selfCheck(Print& out) {
     return bad;
 }
 
-#endif  // ARDUINO_ARCH_ESP32
+#endif  // SQW_REAL_TFT_ESPI
