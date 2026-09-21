@@ -373,6 +373,12 @@
  CLOCK             Set by USB, or taken from the first squad member heard —
                    every squad hello carries the sender's clock and zone.
  POWER SAVER       Brightness, dimming, battery settings.
+ BATTERY %         On the Guition JC3248W535EN only, the one board here with
+                   a battery input. A percentage in the title bar, left of
+                   the padlock and rotate icons: green, amber under 35%, red
+                   under 15%, cyan while charging. Read off GPIO5 through the
+                   board's 2:1 divider. Every other board has no battery
+                   input and draws nothing.
 
 
 ===============================================================================

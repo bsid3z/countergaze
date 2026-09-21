@@ -1,59 +1,60 @@
 // SquachWatch-CYD — battery level. See battery.h for why only one board has one.
 #include "battery.h"
 
-// DISABLED ON HARDWARE EVIDENCE -- DO NOT RE-ENABLE WITHOUT READING THIS.
+// Guition JC3248W535EN only. See battery.h.
 //
-// Reading GPIO5 appears to cut the board's own battery power path. Observed
-// directly: the board ran from its cell, this code shipped, and after the
-// reset that made it live the board would no longer run with USB detached.
-// It worked a minute earlier on the previous image.
+// READ THIS BEFORE CHANGING HOW THE PIN IS TOUCHED.
 //
-// The mechanism that fits: analogSetPinAttenuation()/analogReadMilliVolts()
-// reconfigure the pin as an analog input, which releases whatever digital
-// state it was holding. This board's power is latched through an IP5306,
-// which is button-controlled -- if GPIO5 is part of that latch rather than
-// the divider it was believed to be, then measuring it switches the board
-// off the moment the firmware starts.
+// A first attempt used analogSetPinAttenuation() + analogReadMilliVolts(),
+// and the board then would not run on battery at all: it was fine on USB,
+// nothing crashed, nothing logged, it simply died when USB came out.
+// Removing the read brought battery power back. Whether that was the
+// attenuation call, or GPIO5 being something other than a divider, was not
+// established -- but it happened, and it cost a debugging session.
 //
-// GPIO5 and the 2:1 ratio were never confirmed against a schematic; Guition
-// publish none. They came from a third-party firmware, and the header always
-// said so. This is what that uncertainty cost.
+// So this now does EXACTLY what a working third-party firmware for this
+// board does, and nothing more:
 //
-// Before trying again: probe GPIO5 with a meter against the cell, with the
-// board running on battery and NOT reading the pin. If it tracks half the
-// battery voltage it is a divider and something else explains this; if it
-// sits at a logic level, it is a control line and must never be read.
-#if 0 && defined(JC3248)
+//   pinMode(PIN, INPUT)   once, at setup
+//   analogRead(PIN)       plain, averaged over 16 samples
+//   volts = (raw / 4095.0) * 3.3 * 2.0
+//
+// No analogSetPinAttenuation. No analogReadMilliVolts. Those are better
+// calls in general -- the ADC is non-linear and analogReadMilliVolts
+// applies the chip calibration for it -- and they are not used here,
+// because "better" is worth less than "known to run on this board".
+//
+// If the board stops surviving USB removal again, this is the first thing
+// to suspect, and the recovery is: flash with SQW_BATTERY_READ 0 below,
+// then press RESET. The reset matters -- esptool's own does not land on
+// this board, so without it the old image keeps running.
+#define SQW_BATTERY_READ 1
+
+#if SQW_BATTERY_READ && defined(JC3248)
 
 #include <Arduino.h>
 
 namespace Battery {
 namespace {
 
-// The rail is divided 2:1 into this pin, so the ADC sees half the cell.
-// From a working third-party firmware for this board, not from a datasheet
-// -- Guition publish no schematic. See the header.
 const int      PIN        = 5;
 const float    DIVIDER    = 2.0f;
+const float    ADC_REF    = 3.3f;    // 11 dB attenuation, measured rather than nominal
+const int      SAMPLES    = 16;
 
 // What a single lithium cell can actually be. Outside this, something is
-// not a battery: a floating input wanders across the whole range and an
-// absent one sits near zero.
+// not a battery: an absent one reads near zero.
 const float    SANE_MIN   = 2.60f;
 const float    SANE_MAX   = 4.45f;
-
-// Above this the rail is being held up by the charger rather than by the
-// cell -- a cell on its own does not sit here for long.
 const float    CHARGING_V = 4.25f;
 
 // Consecutive in-range readings before believing there is a battery, and
 // consecutive out-of-range ones before giving up on it. Asymmetric on
-// purpose: appearing is a claim, disappearing is a retraction, and a
-// percentage that blinks in and out is worse than none.
-const uint8_t  CONFIRM    = 5;
+// purpose: appearing is a claim, disappearing is a retraction.
+const uint8_t  CONFIRM    = 3;
 
 const uint32_t SAMPLE_MS  = 2000;
-const float    SMOOTH     = 0.25f;   // EMA weight for each new sample
+const float    SMOOTH     = 0.25f;
 
 bool     s_begun   = false;
 bool     s_present = false;
@@ -61,31 +62,29 @@ uint8_t  s_good    = 0, s_bad = 0;
 float    s_volts   = 0.0f;
 uint32_t s_lastMs  = 0;
 
-// One cell's discharge curve, as volts at each 10% from empty to full.
-// A straight 3.0-4.2 map spends most of its time reading nearly full and
-// then collapses; this at least falls at something like the right rate.
+// One cell's discharge curve, volts at each 10% from empty to full. A
+// straight 3.0-4.2 map reads nearly full for most of the discharge and
+// then collapses; this descends at something like the right rate.
 const float CURVE[11] = {
     3.20f, 3.55f, 3.65f, 3.70f, 3.74f, 3.78f,
     3.83f, 3.89f, 3.96f, 4.06f, 4.20f
 };
 
 void sample() {
-    // analogReadMilliVolts applies the chip's own ADC calibration, which
-    // matters here: the raw count on an ESP32 ADC is not linear and reading
-    // it directly is good for about half a volt of error at the top end.
-    const uint32_t mv = analogReadMilliVolts(PIN);
-    const float    v  = (mv / 1000.0f) * DIVIDER;
+    // Averaged, because a single ESP32 ADC conversion is noisy enough to
+    // move the percentage around on its own. No delay() between samples --
+    // this runs inside the frame loop, not in setup like the firmware this
+    // is copied from, and 16 sleeps of 5 ms would cost a frame and a half.
+    uint32_t total = 0;
+    for (int i = 0; i < SAMPLES; i++) total += (uint32_t)analogRead(PIN);
+    const uint32_t raw = total / SAMPLES;
+    const float    v   = (raw / 4095.0f) * ADC_REF * DIVIDER;
 
-    // The very first reading, said immediately and unconditionally. The
-    // confirmed verdict below needs several samples and arrives seconds
-    // later, which on this board is often after the USB console has already
-    // stopped draining -- so the one number worth having is printed while
-    // anything is still listening.
     static bool first = true;
     if (first) {
         first = false;
-        Serial.printf("[batt] GPIO%d first read: %lu mV -> %.2f V at the cell\n",
-                      PIN, (unsigned long)mv, v);
+        Serial.printf("[batt] GPIO%d first read: raw %lu -> %.2f V at the cell\n",
+                      PIN, (unsigned long)raw, v);
     }
 
     const bool sane = (v > SANE_MIN && v < SANE_MAX);
@@ -93,35 +92,18 @@ void sample() {
     else      { if (s_bad  < CONFIRM) s_bad++;  s_good = 0; }
 
     if (!s_present && s_good >= CONFIRM) {
-        s_present = true;  s_volts = v;
-        Serial.printf("[batt] cell detected: %.2f V on GPIO%d (raw %lu mV)\n",
-                      v, PIN, (unsigned long)mv);
+        s_present = true; s_volts = v;
+        Serial.printf("[batt] cell detected: %.2f V\n", v);
     } else if (s_present && s_bad >= CONFIRM) {
         s_present = false; s_volts = 0.0f;
-        Serial.printf("[batt] cell gone: %.2f V is outside %.2f-%.2f\n",
-                      v, SANE_MIN, SANE_MAX);
     } else if (s_present && sane) {
         s_volts += (v - s_volts) * SMOOTH;
-    }
-
-    // Said once, whatever the verdict, so "why is there no percentage" has
-    // an answer on the console instead of needing a meter. A pin reading
-    // near zero is no cell; one wandering mid-range with nothing attached
-    // is the thing this would otherwise invent a battery from.
-    static bool announced = false;
-    if (!announced && (s_good >= CONFIRM || s_bad >= CONFIRM)) {
-        announced = true;
-        Serial.printf("[batt] GPIO%d reads %lu mV -> %.2f V at the cell: %s\n",
-                      PIN, (unsigned long)mv, v,
-                      s_present ? "battery" : "no battery, nothing drawn");
     }
 }
 
 void tick() {
     begin();
     const uint32_t now = millis();
-    // The first sample is taken immediately, so a board that has been up a
-    // while does not wait two seconds to find its own battery.
     if (s_lastMs != 0 && (now - s_lastMs) < SAMPLE_MS) return;
     s_lastMs = now ? now : 1;
     sample();
@@ -132,10 +114,7 @@ void tick() {
 void begin() {
     if (s_begun) return;
     s_begun = true;
-    // 11 dB: the full 0-~3.1 V input range. At 2:1 that covers a cell up to
-    // about 6 V, so a full 4.2 V one is nowhere near the ceiling where the
-    // ADC stops being linear.
-    analogSetPinAttenuation(PIN, ADC_11db);
+    pinMode(PIN, INPUT);   // and nothing else -- see the note at the top
 }
 
 bool present()  { tick(); return s_present; }

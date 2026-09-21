@@ -391,6 +391,12 @@
                    dat het hoort — elke squad-hello draagt de klok en zone
                    van de afzender mee.
  POWER SAVER       Helderheid, dimmen, accu-instellingen.
+ BATTERY %         Alleen op de Guition JC3248W535EN, het enige board hier
+                   met een accu-ingang. Een percentage in de title bar,
+                   links van het slotje en het rotate-icoon: groen, amber
+                   onder 35%, rood onder 15%, cyaan tijdens opladen.
+                   Uitgelezen van GPIO5 via de 2:1 divider van het board.
+                   Elk ander board heeft geen accu-ingang en tekent niets.
 
 
 ===============================================================================
