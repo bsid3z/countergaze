@@ -1,7 +1,29 @@
 // SquachWatch-CYD — battery level. See battery.h for why only one board has one.
 #include "battery.h"
 
-#if defined(JC3248)
+// DISABLED ON HARDWARE EVIDENCE -- DO NOT RE-ENABLE WITHOUT READING THIS.
+//
+// Reading GPIO5 appears to cut the board's own battery power path. Observed
+// directly: the board ran from its cell, this code shipped, and after the
+// reset that made it live the board would no longer run with USB detached.
+// It worked a minute earlier on the previous image.
+//
+// The mechanism that fits: analogSetPinAttenuation()/analogReadMilliVolts()
+// reconfigure the pin as an analog input, which releases whatever digital
+// state it was holding. This board's power is latched through an IP5306,
+// which is button-controlled -- if GPIO5 is part of that latch rather than
+// the divider it was believed to be, then measuring it switches the board
+// off the moment the firmware starts.
+//
+// GPIO5 and the 2:1 ratio were never confirmed against a schematic; Guition
+// publish none. They came from a third-party firmware, and the header always
+// said so. This is what that uncertainty cost.
+//
+// Before trying again: probe GPIO5 with a meter against the cell, with the
+// board running on battery and NOT reading the pin. If it tracks half the
+// battery voltage it is a divider and something else explains this; if it
+// sits at a logic level, it is a control line and must never be read.
+#if 0 && defined(JC3248)
 
 #include <Arduino.h>
 
