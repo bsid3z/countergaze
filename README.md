@@ -1,22 +1,38 @@
 # SquachWatch-CYD
 
-> Surveillance-device detector for the ESP32-2432S028R ("Cheap Yellow Display").
+> Surveillance-device detector for cheap ESP32 display boards.
+> **This repo adds the Guition JC3248W535EN. Everything else is
+> [skizzophrenic](https://github.com/skizzophrenic)'s.**
+
+### Two names, so neither surprises you
+
+|  |  |
+|---|---|
+| **The software is `SquachWatch-CYD`.** | Written by **[skizzophrenic](https://github.com/skizzophrenic)** (Talking Sasquach). That is its name here too — this fork renames nothing. |
+| **This repo is `countergaze`.** | Just the fork's address on GitHub, owned by [@bsid3z](https://github.com/bsid3z). It is not a product, a rebrand, or a competing project. |
+| **The `-CYD` in the name is historical.** | It meant the Sunton "Cheap Yellow Display". The firmware now runs on seven boards, and the one this fork adds — the Guition JC3248W535EN — is **not** a CYD. The name stayed; the hardware list grew. |
 
 > ### This is a fork. SquachWatch is skizzophrenic's work.
 >
 > Everything below — the firmware, the detection research, Squachy, SquachMesh,
-> the SquachWare aesthetic, the emulator, every screen in the demo — was written
-> by **[skizzophrenic](https://github.com/skizzophrenic)** (Talking Sasquach).
+> the SquachWare aesthetic, the emulator, the graphics on this page, every
+> screen in the demo — was written by
+> **[skizzophrenic](https://github.com/skizzophrenic)** (Talking Sasquach).
 > Upstream is **[skizzophrenic/SquachWatch-CYD](https://github.com/skizzophrenic/SquachWatch-CYD)**
 > and the project's home is **[talkingsasquach.com](https://talkingsasquach.com)**.
-> If SquachWatch is useful to you, support it there — not here.
+> **If SquachWatch is useful to you, support it there — not here.**
 >
 > This fork exists for exactly one reason: to add the **Guition JC3248W535EN**,
 > a 3.5" ESP32-S3 board that upstream cannot run on. Every other board behaves
-> identically to upstream, the name and the branding are unchanged, and no
-> feature has been added or removed. See
+> identically to upstream, no feature has been added or removed, and the
+> branding is untouched. See
 > **[Changes from upstream](#changes-from-upstream)** for the complete list and
 > **[docs/JC3248W535EN.md](docs/JC3248W535EN.md)** for how the port works.
+>
+> **Looking for the original, on a CYD?** Go to
+> [skizzophrenic/SquachWatch-CYD](https://github.com/skizzophrenic/SquachWatch-CYD)
+> or flash straight from [squachwatch.com](https://squachwatch.com/) — you do
+> not need this fork unless you own a JC3248W535EN.
 >
 > GPL-3.0, same as upstream.
 
