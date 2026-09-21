@@ -1,0 +1,425 @@
+===============================================================================
+ SquachWatch — what it does, and technically what it detects
+===============================================================================
+
+ A standalone surveillance-device detector. It listens to 2.4 GHz WiFi and
+ Bluetooth LE and identifies cameras, trackers, police equipment, attack
+ tools and drones from their radio signatures.
+
+ No PC, no app, no account, no cloud. Plug the board into USB and it works.
+
+ SquachWatch is by skizzophrenic (Talking Sasquach):
+   https://github.com/skizzophrenic/SquachWatch-CYD  .  talkingsasquach.com
+ This repository is a fork that adds one board, the Guition JC3248W535EN.
+ Licence: GPL-3.0.
+
+ Everything below is read out of the firmware source (src/signatures.cpp,
+ src/detection.cpp, src/remote_id.cpp, include/state.h), not from marketing.
+
+
+===============================================================================
+ PART ONE — HOW IT LISTENS
+===============================================================================
+
+ -----------------------------------------------------------------------------
+ Bluetooth LE
+ -----------------------------------------------------------------------------
+ Library      NimBLE, compiled OBSERVER + BROADCASTER roles only.
+              Central and peripheral roles are compiled OUT. The firmware
+              cannot open an outbound connection and cannot accept one.
+ Scan type    PASSIVE  (setActiveScan(false))
+              It never sends a SCAN_REQ. It does not probe, wake, or
+              identify itself to anything it detects. It only receives
+              advertisements that were already being broadcast.
+ Interval     100 (x0.625 ms = 62.5 ms)
+ Window       75  (x0.625 ms = 46.9 ms)  -> ~75% duty cycle
+ Duration     Indefinite (scan->start(0)), restarted on a watchdog
+ Results      setMaxResults(0) — nothing is retained by the stack; every
+              advertisement is handled in the callback and dropped
+
+ What it reads out of each advertisement:
+   - the advertiser's MAC (-> OUI lookup)
+   - 16-bit service UUIDs (-> UUID table)
+   - manufacturer data: the 16-bit company ID, then the payload
+     (-> company-ID table, iBeacon check, Find My check)
+   - the advertised device name (-> name matching)
+   - RSSI (-> distance/signal meter, proximity logic)
+
+ -----------------------------------------------------------------------------
+ WiFi  (2.4 GHz only — the ESP32 has no 5 GHz radio)
+ -----------------------------------------------------------------------------
+ Mode         Promiscuous monitor mode (esp_wifi_set_promiscuous)
+              with a promiscuous filter set for management frames.
+ Channels     Hops 1 -> 13, dwelling ~300 ms per channel.
+              Without hopping, the sniffer parks on one channel and misses
+              everything transmitting elsewhere in the band.
+ It NEVER associates, authenticates, or transmits in order to scan. The
+ radio only joins a network when you explicitly ask for a firmware update.
+
+ What it reads out of each frame:
+   - source/BSSID MAC (-> OUI lookup)
+   - SSID from beacons/probe responses (-> SSID prefix table)
+   - frame subtype and rate (-> deauth flood detection)
+   - the beacon's full tagged-parameter body (-> Pwnagotchi JSON)
+   - encryption/auth advertised per BSSID (-> evil twin comparison)
+
+ -----------------------------------------------------------------------------
+ Bluetooth Classic
+ -----------------------------------------------------------------------------
+ Device-name matching against known modules, plus the Serial Port Profile
+ UUID. This is how the card-skimmer modules are found — they are Classic
+ SPP bridges, not BLE.
+
+
+===============================================================================
+ PART TWO — THE SEVEN DETECTION MECHANISMS
+===============================================================================
+
+ 1. WIFI OUI PREFIX          77 entries. First 3 bytes of a MAC, matched
+                             against the IEEE registry. Exact match.
+ 2. BLE 16-BIT SERVICE UUID  16 entries. Exact match.
+ 3. BLE COMPANY ID           8 entries. Bluetooth SIG assigned. Exact.
+ 4. WIFI SSID PREFIX         10 entries, case-insensitive prefix match.
+ 5. BT CLASSIC NAME          7 exact names + 5 substring matches.
+ 6. PAYLOAD DECODE           iBeacon header, Apple Find My, ASTM F3411
+                             Remote ID, Pwnagotchi JSON. Structure is
+                             parsed, not pattern-matched.
+ 7. BEHAVIOURAL / RATE       Deauth floods and evil twins. Nothing is
+                             matched against a table — these are detected
+                             from what the traffic is DOING.
+
+ Confidence is graded PER SIGNATURE, not per type. Of 76 signature rows:
+ 32 High, 4 Medium, 40 Low. See docs/DETECTIONS.md for each one's
+ provenance. Every hardware prefix was checked against the IEEE registry
+ rather than copied from another detector.
+
+
+===============================================================================
+ PART THREE — EVERY SIGNATURE, BY TYPE
+===============================================================================
+
+ 17 detectable types (DetectionType in include/state.h).
+
+ -----------------------------------------------------------------------------
+ FLOCK — Flock Safety ALPR cameras and sensors
+ -----------------------------------------------------------------------------
+ WiFi OUI (29):
+   24:0A:C4  30:AE:A4  24:6F:28  CC:50:E3  DC:54:75  E8:9F:6D   (Flock-ESP32)
+   8C:AA:B5  34:85:18  84:F3:EB                                 (Flok-ESP-S3)
+   B4:1E:52                                                     (Flock-MA-L)
+   D4:AD:FC  AC:67:B2  B4:E6:2D  CC:DB:A7  94:B9:7E             (Flock-ESP32)
+   A4:CF:12                                                     (Flok-ESP-S2)
+   C0:49:EF                                                     (Flok-ESP-C6)
+   24:B2:B9                                                     (Flock-Liteo)
+   D0:39:57  00:F4:8D  14:5A:FC  80:30:49  E0:0A:F6  70:C9:4E
+   3C:91:80  D8:F3:BC  B8:35:32  82:6B:F2  00:A0:D8             (Flock)
+ BLE company ID:  0x09C8  (XUNTONG — Flock's BLE radio supplier)
+ SSID prefix:     "flock-", "FLOCK-"
+ BT name exact:   "Flock_Setup", "FS Ext Battery"
+ BT name contains: "Flock", "Penguin", "Pigvision"
+
+ -----------------------------------------------------------------------------
+ AXON — body cameras, TASERs, law-enforcement equipment
+ -----------------------------------------------------------------------------
+ WiFi OUI (3):    00:25:DF (Axon)  E4:05:40 (Axon-Body)  28:24:FF (Axon-Signal)
+ SSID prefix:     "AB2-" (Body2), "AB3-" (Body3), "AB4-" (Body4), "AXON-" (Field)
+ BT name contains: "Axon"
+
+ -----------------------------------------------------------------------------
+ ALPR — Motorola Solutions / Genetec plate readers
+ -----------------------------------------------------------------------------
+ WiFi OUI (7):    00:04:7D  00:18:85  00:1F:92  4C:CC:34  B8:E2:8C  (Motorola)
+                  00:BF:15  0C:BF:15                              (Genetec)
+
+ -----------------------------------------------------------------------------
+ RAVEN — gunshot detector
+ -----------------------------------------------------------------------------
+ BLE service UUID (5): 0x3100  0x3200  0x3300  0x3400  0x3500
+
+ -----------------------------------------------------------------------------
+ META — camera glasses (Ray-Ban Meta, Snap Spectacles)
+ -----------------------------------------------------------------------------
+ BLE service UUID: 0xFD5F   <- the SPECIFIC one; Ray-Ban Meta only
+ BLE company ID:   0x01AB (Meta Platforms)
+                   0x058E (Meta Platforms Technologies)
+                   0x0D53 (Luxottica — Ray-Ban's manufacturer)
+                   0x03C2 (Snap — Spectacles)
+ NOTE: the company IDs are any Meta radio, Quest headsets included. A hit
+ on those means a Meta device nearby, not necessarily a camera pointed at
+ you. That is exactly why META is not graded High. 0xFD5F is the specific
+ match.
+
+ -----------------------------------------------------------------------------
+ CAMERA — generic and covert IP cameras
+ -----------------------------------------------------------------------------
+ WiFi OUI (17):
+   2C:AA:8E  D0:3F:27  7C:78:B2  B8:D7:AF   Wyze
+   34:D2:70  F0:27:2D                       Amazon
+   C0:56:E3  44:19:B6  28:57:BE             Hikvision
+   00:E0:4C                                 Realtek
+   BC:DD:C2  Arlo      4C:69:05  Blink      A4:C1:38  Tuya
+   E0:A7:00  Verkada   70:1A:D5  Avigilon
+   00:40:8C  B8:A4:4F                       Axis
+
+ -----------------------------------------------------------------------------
+ RING — Ring doorbells and cameras
+ -----------------------------------------------------------------------------
+ WiFi OUI (15):
+   FC:65:DE  68:37:E9  AC:9F:C3  18:7F:88  34:3E:A4  54:E0:19  5C:47:5E
+   64:9A:63  90:48:6C  9C:76:13  CC:3B:FB  C4:DB:AD  24:2B:D6  00:B4:63
+   50:E4:67
+ (Ring LLC's registered block plus Amazon's.)
+
+ -----------------------------------------------------------------------------
+ AIRTAG — Apple AirTag / Find My
+ -----------------------------------------------------------------------------
+ BLE company ID:  0x004C (Apple), then a Find My payload check on the
+                  manufacturer data. Company ID alone is every Apple device
+                  in the room; the payload check is what narrows it.
+
+ -----------------------------------------------------------------------------
+ SAMSUNG_TAG — Galaxy SmartTag / SmartTag+
+ -----------------------------------------------------------------------------
+ BLE service UUID: 0xFD5A  (Samsung's SIG-assigned discovery UUID)
+
+ -----------------------------------------------------------------------------
+ GOOGLE_TAG — Google Find My Device network
+ -----------------------------------------------------------------------------
+ BLE service UUID: 0xFEAA  (Eddystone, reused by the Find My Device network)
+ Covers Chipolo, Pebblebee, Moto Tag. Best-effort: 0xFEAA is also plain
+ Eddystone beacons.
+
+ -----------------------------------------------------------------------------
+ TILE — Tile trackers
+ -----------------------------------------------------------------------------
+ BLE service UUID: 0xFEED, 0xFEEC  (both SIG-assigned to Tile, Inc.)
+
+ -----------------------------------------------------------------------------
+ SKIMMER — Bluetooth card skimmers
+ -----------------------------------------------------------------------------
+ BT Classic name (exact): "HC-03", "HC-05", "HC-06", "RN42", "BT04-A"
+ BLE/Classic service UUID: 0x1101  (Serial Port Profile)
+ WiFi OUI (3):  20:13:00 (Linvor)  98:D3:00 (SPP module)  00:1A:7D (CSR)
+
+ -----------------------------------------------------------------------------
+ DRONE — Remote ID, and it is DECODED not just detected
+ -----------------------------------------------------------------------------
+ BLE service UUID: 0xFFFA (OpenDroneID)
+ Then the ASTM F3411 message is parsed, and successive messages are MERGED
+ into one picture of the aircraft:
+   serial       up to 20 chars (ODID_ID_SIZE), the aircraft's ID
+   uaType       PLANE QUAD HELI GYRO VTOL ORNITH GLIDER KITE FREEBAL
+                CAPBAL AIRSHIP PARA
+   lat / lon    the AIRCRAFT's position, degrees
+   altM         geodetic altitude, metres
+   opLat/opLon  the OPERATOR's position — where the pilot is standing
+ The operator location comes from the System message. Merging matters:
+ different fields arrive in different message types, so one advert alone is
+ never the whole picture.
+
+ -----------------------------------------------------------------------------
+ IBEACON — Apple iBeacon proximity beacons  [OFF BY DEFAULT]
+ -----------------------------------------------------------------------------
+ Exact manufacturer-data header, at least 25 bytes:
+   byte 0-1  4C 00     Apple, little endian
+   byte 2    02        iBeacon type
+   byte 3    15        length, 21
+ Off by default because retail beacons are genuinely everywhere; turning
+ them on is behind a screen that explains what you are about to see.
+
+ -----------------------------------------------------------------------------
+ HACKER — pentest and wireless-audit hardware
+ -----------------------------------------------------------------------------
+ Flipper Zero:
+   BLE service UUID 0x3081, 0x3082, 0x3083  (one per case colour — three
+                                             fixed values, so exact match)
+   BLE company ID   0x0E29  (Flipper Devices Inc.)
+                    NOTE: ESP32 Marauder and everything that copied it use
+                    0x0FBA, which is Cosonic (headsets). That is wrong.
+                    0x0E29 is checked against the SIG registry.
+   WiFi OUI         0C:FA:22
+   BT name contains "Flipper"
+ WiFi Pineapple (Hak5):
+   SSID prefix      "Pineapple_"   (documented default management AP)
+   WiFi OUI         02:C0:CA, 02:13:37
+ ESP8266/ESP32 deauthers (DSTIKE and clones):
+   SSID prefix      "pwned"        (default SSID, password "deauther")
+ Pwnagotchi:
+   Its own beacon payload — a JSON blob stuffed into the tagged parameters
+   of a beacon frame. Keyed on "pwnd_tot", which is what makes it a
+   Pwnagotchi rather than any other beacon. Its name is read out too.
+
+ DELIBERATELY NOT IN THIS BUCKET: bare Espressif and other generic silicon.
+ A nyanBOX, an ESP32 Marauder and a SquachWatch are the same chip, and 16
+ Espressif prefixes already sit under FLOCK. HACKER takes exact signatures
+ only, which is what keeps it worth alerting on.
+
+ -----------------------------------------------------------------------------
+ DEAUTH — WiFi deauthentication / disassociation flood
+ -----------------------------------------------------------------------------
+ No signature at all. Rate-detected from behaviour:
+   6 deauth/disassoc frames within a 3000 ms window
+   then a 15000 ms cooldown before it can fire again
+ This catches the attack, not the attacker's hardware — so it works against
+ a tool that has never been seen before.
+
+ -----------------------------------------------------------------------------
+ EVILTWIN — rogue / spoofed access point
+ -----------------------------------------------------------------------------
+ Also behavioural: one SSID being beaconed from two different BSSIDs whose
+ advertised encryption disagrees. A real AP and an impostor claiming the
+ same network name cannot both be telling the truth about their security.
+
+ -----------------------------------------------------------------------------
+ UNKNOWN
+ -----------------------------------------------------------------------------
+ Everything else seen during a scan. Visible in RAW SCAN, not alerted on.
+
+
+===============================================================================
+ PART FOUR — WHAT IT DOES NOT DO
+===============================================================================
+
+ - No GPS. It never knows or records where you are.
+ - It never joins a network in order to scan. Scanning is entirely passive.
+ - It never sends a BLE scan request. It does not probe, wake or announce
+   itself to anything it detects.
+ - Central/peripheral BLE roles are compiled out — it cannot connect to
+   anything, and nothing can connect to it.
+ - 2.4 GHz only. A 5 GHz-only device is invisible to it.
+ - No account, no telemetry, no cloud, no analytics.
+ - WiFi is joined only for something you explicitly asked for: an update
+   check or a firmware download.
+
+
+===============================================================================
+ PART FIVE — WHAT IT DOES WITH WHAT IT FINDS
+===============================================================================
+
+ MAIN / SCAN       Background, Squachy the mascot, live per-type counters.
+                   Buttons: [ SCAN ]  [ LOG ]  [ DESK ]
+ ALERT             Full-screen, in the detection's own colour: type, vendor,
+                   the device's broadcast name, MAC, channel, signal meter,
+                   instrument grid. Tap to dismiss or it clears after 60 s.
+                   SNOOZE quiets one device until restart.
+                   AUTO SNOOZE: five interruptions, then it must come closer.
+ LOG               Rolling 200-entry detection log.
+ DIARY             What the device has seen over time.
+ RAW SCAN          Manual BLE/WiFi scanner — everything in range, not just
+                   known signatures.
+ HUNT              Live signal-strength gauge for a chosen target, to walk
+                   it down.
+ WATCH ALERT       A marked target comes back into range.
+ BINGO             Detection bingo card.
+ DETECTION FILTER  Per-type on/off.
+ IGNORED DEVICES   Muted devices.
+ DESK MODE         Desk clock: big seven-segment time, date, focus timer.
+ SD LOGGING        With a card: squachwatch-<day>.log, CSV
+                   ts,type,rssi,mac,channel,vendor,ssid
+                   (Not on the Guition JC3248W535EN — no usable card slot.)
+
+
+===============================================================================
+ PART SIX — SQUACHMESH (BOARD TO BOARD)
+===============================================================================
+
+ Boards find and talk to each other over BLE advertisements — which is why
+ the BROADCASTER role stays compiled in. Encrypted with a shared five-word
+ phrase. No internet, no pairing server.
+
+ DETECT            Other boards in range; their Squachy walks over to visit.
+ MESSAGES          Short messages to your squad, red bubble with the
+                   sender's name, read receipts, quick phrases or QWERTY.
+ SQUAD             Everyone in range plus the inbox; members holding your
+                   phrase read MEMBER.
+ ADD TO SQUAD      Join without typing: both boards show the same four
+                   digits, you confirm in person, the phrase goes over
+                   sealed. Defeats a third board in the middle.
+ PHRASE            Roll, show or type the five-word phrase.
+ HUNT A MEMBER     Point the signal gauge at another board.
+ Replay protection: counters persist across a crash, and every board checks
+ its cipher against known test vectors at boot (MeshCrypto self-test).
+
+
+===============================================================================
+ PART SEVEN — SECURITY, UPDATES, THE REST
+===============================================================================
+
+ PIN LOCK          Locks the board. A locked board gives up neither its
+                   phrase, nor its squad, nor its log.
+ UPDATE CONSENT    A board obeys update nudges because it holds your
+                   phrase; SECURITY can turn that off.
+ WIFI UPDATE       Scan, join a saved network, download, install.
+ BLUETOOTH UPDATE  From a browser over BLE.
+ UPDATE CHECK      At boot, asks whether a newer release exists. Tells,
+                   never installs. Can be turned off.
+ UPDATE SQUAD      Tell every board in range to update, sealed with the
+                   phrase.
+ TWO APP SLOTS     1.92 MB each. An update lands in the spare one while the
+                   current one runs; you can switch back.
+ SIGNED PER BOARD  An image for a different display is refused rather than
+                   installed as a white screen.
+ Settings, PINs and mesh pairings survive updates — NVS is never erased.
+
+ OUTFITS           14 costumes. Most earned by detection count; four hidden
+                   behind things nobody tells you about.
+ PET               Squachy has moods, reactions and a life.
+ STATUS LIGHT      RGB LED with its own settings and a six-second TEST.
+ CLOCK             Set by USB, or taken from the first squad member heard —
+                   every squad hello carries the sender's clock and zone.
+ POWER SAVER       Brightness, dimming, battery settings.
+
+
+===============================================================================
+ PART EIGHT — HARDWARE
+===============================================================================
+
+ Board                              Screen        Driver     Touch        Env
+ ---------------------------------- ------------- ---------- ------------ ------------
+ Sunton ESP32-2432S028R "CYD"       2.8" 240x320  ST7789     XPT2046 res  cyd
+ Sunton ESP32-2432S028R "CYD"       2.8" 240x320  ILI9341    XPT2046 res  cyd-ili9341
+ Sunton ESP32-2432S024R RL Phantom  2.4" 240x320  ILI9341    XPT2046 res  rlphantom-r
+ Sunton ESP32-2432S024C RL Phantom  2.4" 240x320  ILI9341    CST820 cap   rlphantom
+ AWOK ESP32-Marauder V6.1           2.4" 240x320  ILI9341    XPT2046 res  awok
+ Sunton ESP32-3248S035              3.5" 480x320  ST7796     XPT2046 res  cyd35 *
+ Guition JC3248W535EN               3.5" 320x480  AXS15231B  AXS15231B    jc3248 **
+                                                  QSPI       capacitive
+
+ *  Frozen upstream and boot-loops on real hardware. Not recommended.
+ ** ESP32-S3, not ESP32. Added by this fork. See docs/JC3248W535EN.md.
+
+ The two 2.8" rows are the same physical board — it shipped with either
+ panel and they cannot be told apart without flashing one and looking.
+
+ FLASHING
+   CYD and other ESP32 boards:  https://squachwatch.com/  (browser)
+   Guition JC3248W535EN:        not on the web flasher — it is an ESP32-S3
+                                and ESP Web Tools refuses a chip that does
+                                not match the manifest.
+     Prebuilt:    firmware/  — four .bin files and one esptool command
+     From source: git clone https://github.com/bsid3z/countergaze
+                  cd countergaze
+                  pio run -e jc3248 -t upload
+     Then PRESS RESET — esptool's own reset does not land on this board.
+     Stuck? Hold BOOT, tap RESET, release BOOT.
+     No USB console by default on purpose: the S3's USB Serial/JTAG unit
+     resets the chip when a host opens the port, and with USB CDC on and
+     nothing draining its buffer the firmware blocks in setup(). Build
+     -e jc3248-debug for a console.
+
+
+===============================================================================
+ PART NINE — FOR DEVELOPERS
+===============================================================================
+
+ PC EMULATOR   sim/ compiles the real src/ against shims and renders actual
+               frames; also runs in a browser via WebAssembly. Every
+               screenshot in the docs is firmware output, not a mockup.
+ HOST TESTS    make -C test — decoders, signature tables, and the
+               emulator's fidelity to the display library.
+               Linux/macOS: src/signatures.cpp uses strcasestr (glibc), and
+               gfx/TFT_eSPI.h wants -D_USE_MATH_DEFINES on MinGW.
+ CI            Every push: builds all boards, runs the tests, builds the
+               emulator and renders a frame.
+
+===============================================================================

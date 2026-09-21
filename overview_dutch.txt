@@ -1,0 +1,447 @@
+===============================================================================
+ SquachWatch — wat het doet, en technisch gezien wat het detecteert
+===============================================================================
+
+ Een zelfstandige detector voor surveillance-apparatuur. Het luistert naar
+ 2.4 GHz WiFi en Bluetooth LE en herkent camera's, trackers, politie-
+ apparatuur, aanvalstools en drones aan hun radio-signatuur.
+
+ Geen PC, geen app, geen account, geen cloud. Stop het board in USB en het
+ werkt.
+
+ SquachWatch is van skizzophrenic (Talking Sasquach):
+   https://github.com/skizzophrenic/SquachWatch-CYD  .  talkingsasquach.com
+ Deze repository is een fork die één board toevoegt: de Guition
+ JC3248W535EN. Licentie: GPL-3.0.
+
+ Alles hieronder is uit de firmware-broncode gehaald (src/signatures.cpp,
+ src/detection.cpp, src/remote_id.cpp, include/state.h), niet uit reclame.
+
+
+===============================================================================
+ DEEL EEN — HOE HET LUISTERT
+===============================================================================
+
+ -----------------------------------------------------------------------------
+ Bluetooth LE
+ -----------------------------------------------------------------------------
+ Library      NimBLE, gecompileerd met alleen de OBSERVER + BROADCASTER
+              roles. Central en peripheral zijn eruit gecompileerd. De
+              firmware kan geen uitgaande verbinding opzetten en kan er ook
+              geen accepteren.
+ Scan type    PASSIVE  (setActiveScan(false))
+              Het verstuurt nooit een SCAN_REQ. Het probet niets, wekt
+              niets, en maakt zich niet kenbaar aan wat het detecteert. Het
+              ontvangt alleen advertisements die al werden uitgezonden.
+ Interval     100 (x0.625 ms = 62.5 ms)
+ Window       75  (x0.625 ms = 46.9 ms)  -> ~75% duty cycle
+ Duur         Oneindig (scan->start(0)), herstart via een watchdog
+ Results      setMaxResults(0) — de stack bewaart niets; elke advertisement
+              wordt in de callback afgehandeld en weggegooid
+
+ Wat het uit elke advertisement leest:
+   - het MAC-adres van de zender (-> OUI lookup)
+   - 16-bit service UUIDs (-> UUID-tabel)
+   - manufacturer data: de 16-bit company ID en daarna de payload
+     (-> company-ID tabel, iBeacon-check, Find My-check)
+   - de geadverteerde device name (-> name matching)
+   - RSSI (-> afstand/signaalmeter, nabijheidslogica)
+
+ -----------------------------------------------------------------------------
+ WiFi  (alleen 2.4 GHz — de ESP32 heeft geen 5 GHz radio)
+ -----------------------------------------------------------------------------
+ Mode         Promiscuous monitor mode (esp_wifi_set_promiscuous) met een
+              promiscuous filter ingesteld op management frames.
+ Kanalen      Hopt 1 -> 13, met ongeveer 300 ms dwell per kanaal.
+              Zonder hoppen blijft de sniffer op één kanaal staan en mist
+              alles wat elders in de band zendt.
+ Het associeert, authenticeert of zendt NOOIT om te scannen. De radio gaat
+ alleen een netwerk op als je expliciet om een firmware-update vraagt.
+
+ Wat het uit elke frame leest:
+   - source/BSSID MAC (-> OUI lookup)
+   - SSID uit beacons/probe responses (-> SSID prefix-tabel)
+   - frame subtype en rate (-> deauth flood detectie)
+   - de volledige tagged-parameter body van de beacon (-> Pwnagotchi JSON)
+   - de geadverteerde encryptie/auth per BSSID (-> evil twin vergelijking)
+
+ -----------------------------------------------------------------------------
+ Bluetooth Classic
+ -----------------------------------------------------------------------------
+ Device-name matching tegen bekende modules, plus de Serial Port Profile
+ UUID. Zo worden de card skimmers gevonden — dat zijn Classic SPP bridges,
+ geen BLE.
+
+
+===============================================================================
+ DEEL TWEE — DE ZEVEN DETECTIEMECHANISMEN
+===============================================================================
+
+ 1. WIFI OUI PREFIX          77 entries. De eerste 3 bytes van een MAC,
+                             gecontroleerd tegen het IEEE-register.
+                             Exacte match.
+ 2. BLE 16-BIT SERVICE UUID  16 entries. Exacte match.
+ 3. BLE COMPANY ID           8 entries. Toegekend door de Bluetooth SIG.
+ 4. WIFI SSID PREFIX         10 entries, hoofdletterongevoelige prefix.
+ 5. BT CLASSIC NAME          7 exacte namen + 5 substring-matches.
+ 6. PAYLOAD DECODE           iBeacon header, Apple Find My, ASTM F3411
+                             Remote ID, Pwnagotchi JSON. De structuur wordt
+                             geparsed, niet als patroon gematcht.
+ 7. GEDRAG / RATE            Deauth floods en evil twins. Hier wordt niets
+                             tegen een tabel gematcht — dit wordt herkend
+                             aan wat het verkeer DOET.
+
+ Confidence wordt PER SIGNATUUR bepaald, niet per type. Van 76 signatuur-
+ regels: 32 High, 4 Medium, 40 Low. Zie docs/DETECTIONS.md voor de
+ herkomst van elke regel. Elke hardware-prefix is gecontroleerd tegen het
+ IEEE-register in plaats van overgenomen uit een andere detector.
+
+
+===============================================================================
+ DEEL DRIE — ELKE SIGNATUUR, PER TYPE
+===============================================================================
+
+ 17 detecteerbare types (DetectionType in include/state.h).
+
+ -----------------------------------------------------------------------------
+ FLOCK — Flock Safety ALPR-camera's en sensoren
+ -----------------------------------------------------------------------------
+ WiFi OUI (29):
+   24:0A:C4  30:AE:A4  24:6F:28  CC:50:E3  DC:54:75  E8:9F:6D   (Flock-ESP32)
+   8C:AA:B5  34:85:18  84:F3:EB                                 (Flok-ESP-S3)
+   B4:1E:52                                                     (Flock-MA-L)
+   D4:AD:FC  AC:67:B2  B4:E6:2D  CC:DB:A7  94:B9:7E             (Flock-ESP32)
+   A4:CF:12                                                     (Flok-ESP-S2)
+   C0:49:EF                                                     (Flok-ESP-C6)
+   24:B2:B9                                                     (Flock-Liteo)
+   D0:39:57  00:F4:8D  14:5A:FC  80:30:49  E0:0A:F6  70:C9:4E
+   3C:91:80  D8:F3:BC  B8:35:32  82:6B:F2  00:A0:D8             (Flock)
+ BLE company ID:  0x09C8  (XUNTONG — leverancier van Flocks BLE-radio)
+ SSID prefix:     "flock-", "FLOCK-"
+ BT name exact:   "Flock_Setup", "FS Ext Battery"
+ BT name bevat:   "Flock", "Penguin", "Pigvision"
+
+ -----------------------------------------------------------------------------
+ AXON — bodycams, TASERs, politie-apparatuur
+ -----------------------------------------------------------------------------
+ WiFi OUI (3):    00:25:DF (Axon)  E4:05:40 (Axon-Body)  28:24:FF (Axon-Signal)
+ SSID prefix:     "AB2-" (Body2), "AB3-" (Body3), "AB4-" (Body4), "AXON-"
+ BT name bevat:   "Axon"
+
+ -----------------------------------------------------------------------------
+ ALPR — kentekenlezers van Motorola Solutions / Genetec
+ -----------------------------------------------------------------------------
+ WiFi OUI (7):    00:04:7D  00:18:85  00:1F:92  4C:CC:34  B8:E2:8C  (Motorola)
+                  00:BF:15  0C:BF:15                              (Genetec)
+
+ -----------------------------------------------------------------------------
+ RAVEN — gunshot detector (schotdetectie)
+ -----------------------------------------------------------------------------
+ BLE service UUID (5): 0x3100  0x3200  0x3300  0x3400  0x3500
+
+ -----------------------------------------------------------------------------
+ META — camerabrillen (Ray-Ban Meta, Snap Spectacles)
+ -----------------------------------------------------------------------------
+ BLE service UUID: 0xFD5F   <- de SPECIFIEKE; alleen Ray-Ban Meta
+ BLE company ID:   0x01AB (Meta Platforms)
+                   0x058E (Meta Platforms Technologies)
+                   0x0D53 (Luxottica — de fabrikant van Ray-Ban)
+                   0x03C2 (Snap — Spectacles)
+ LET OP: de company IDs gelden voor elke Meta-radio, Quest-headsets
+ inbegrepen. Een hit daarop betekent een Meta-apparaat in de buurt, niet
+ per se een camera die op jou gericht staat. Precies daarom is META niet
+ als High beoordeeld. 0xFD5F is de specifieke match.
+
+ -----------------------------------------------------------------------------
+ CAMERA — generieke en verborgen IP-camera's
+ -----------------------------------------------------------------------------
+ WiFi OUI (17):
+   2C:AA:8E  D0:3F:27  7C:78:B2  B8:D7:AF   Wyze
+   34:D2:70  F0:27:2D                       Amazon
+   C0:56:E3  44:19:B6  28:57:BE             Hikvision
+   00:E0:4C                                 Realtek
+   BC:DD:C2  Arlo      4C:69:05  Blink      A4:C1:38  Tuya
+   E0:A7:00  Verkada   70:1A:D5  Avigilon
+   00:40:8C  B8:A4:4F                       Axis
+
+ -----------------------------------------------------------------------------
+ RING — Ring-deurbellen en -camera's
+ -----------------------------------------------------------------------------
+ WiFi OUI (15):
+   FC:65:DE  68:37:E9  AC:9F:C3  18:7F:88  34:3E:A4  54:E0:19  5C:47:5E
+   64:9A:63  90:48:6C  9C:76:13  CC:3B:FB  C4:DB:AD  24:2B:D6  00:B4:63
+   50:E4:67
+ (Het geregistreerde blok van Ring LLC plus dat van Amazon.)
+
+ -----------------------------------------------------------------------------
+ AIRTAG — Apple AirTag / Find My
+ -----------------------------------------------------------------------------
+ BLE company ID:  0x004C (Apple), gevolgd door een Find My payload-check op
+                  de manufacturer data. De company ID alleen is elk
+                  Apple-apparaat in de ruimte; de payload-check maakt het
+                  specifiek.
+
+ -----------------------------------------------------------------------------
+ SAMSUNG_TAG — Galaxy SmartTag / SmartTag+
+ -----------------------------------------------------------------------------
+ BLE service UUID: 0xFD5A  (Samsungs eigen SIG-toegekende discovery UUID)
+
+ -----------------------------------------------------------------------------
+ GOOGLE_TAG — Google Find My Device netwerk
+ -----------------------------------------------------------------------------
+ BLE service UUID: 0xFEAA  (Eddystone, hergebruikt door het Find My Device
+                   netwerk). Dekt Chipolo, Pebblebee, Moto Tag. Best-effort:
+                   0xFEAA zijn ook gewone Eddystone-beacons.
+
+ -----------------------------------------------------------------------------
+ TILE — Tile trackers
+ -----------------------------------------------------------------------------
+ BLE service UUID: 0xFEED, 0xFEEC  (beide SIG-toegekend aan Tile, Inc.)
+
+ -----------------------------------------------------------------------------
+ SKIMMER — Bluetooth card skimmers
+ -----------------------------------------------------------------------------
+ BT Classic name (exact): "HC-03", "HC-05", "HC-06", "RN42", "BT04-A"
+ Service UUID:            0x1101  (Serial Port Profile)
+ WiFi OUI (3):  20:13:00 (Linvor)  98:D3:00 (SPP-module)  00:1A:7D (CSR)
+
+ -----------------------------------------------------------------------------
+ DRONE — Remote ID, en het wordt GEDECODEERD, niet alleen gedetecteerd
+ -----------------------------------------------------------------------------
+ BLE service UUID: 0xFFFA (OpenDroneID)
+ Daarna wordt het ASTM F3411-bericht geparsed, en opeenvolgende berichten
+ worden SAMENGEVOEGD tot één beeld van het toestel:
+   serial       max 20 tekens (ODID_ID_SIZE), de ID van het toestel
+   uaType       PLANE QUAD HELI GYRO VTOL ORNITH GLIDER KITE FREEBAL
+                CAPBAL AIRSHIP PARA
+   lat / lon    de positie van het TOESTEL, in graden
+   altM         geodetische hoogte, in meters
+   opLat/opLon  de positie van de OPERATOR — waar de piloot staat
+ De operator-locatie komt uit het System message. Samenvoegen is
+ essentieel: verschillende velden komen in verschillende message types
+ binnen, dus één advertisement is nooit het hele beeld.
+
+ -----------------------------------------------------------------------------
+ IBEACON — Apple iBeacon proximity beacons  [STANDAARD UIT]
+ -----------------------------------------------------------------------------
+ Exacte manufacturer-data header, minimaal 25 bytes:
+   byte 0-1  4C 00     Apple, little endian
+   byte 2    02        iBeacon type
+   byte 3    15        lengte, 21
+ Standaard uit omdat retail-beacons werkelijk overal zijn; ze aanzetten zit
+ achter een scherm dat uitlegt wat je te zien gaat krijgen.
+
+ -----------------------------------------------------------------------------
+ HACKER — pentest- en wireless-audit hardware
+ -----------------------------------------------------------------------------
+ Flipper Zero:
+   BLE service UUID 0x3081, 0x3082, 0x3083  (één per kleur behuizing — drie
+                                             vaste waarden, dus exacte match)
+   BLE company ID   0x0E29  (Flipper Devices Inc.)
+                    LET OP: ESP32 Marauder en alles wat dat heeft
+                    overgenomen gebruiken 0x0FBA, en dat is Cosonic
+                    (headsets). Dat is fout. 0x0E29 is gecontroleerd tegen
+                    het SIG-register.
+   WiFi OUI         0C:FA:22
+   BT name bevat    "Flipper"
+ WiFi Pineapple (Hak5):
+   SSID prefix      "Pineapple_"   (gedocumenteerde standaard management AP)
+   WiFi OUI         02:C0:CA, 02:13:37
+ ESP8266/ESP32 deauthers (DSTIKE en clones):
+   SSID prefix      "pwned"        (standaard SSID, wachtwoord "deauther")
+ Pwnagotchi:
+   Zijn eigen beacon-payload — een JSON-blob in de tagged parameters van
+   een beacon frame. Herkend aan de sleutel "pwnd_tot", en dát maakt het
+   een Pwnagotchi in plaats van zomaar een beacon. Zijn naam wordt ook
+   uitgelezen.
+
+ BEWUST NIET IN DEZE CATEGORIE: kale Espressif- en andere generieke chips.
+ Een nyanBOX, een ESP32 Marauder en een SquachWatch zijn dezelfde chip, en
+ er staan al 16 Espressif-prefixes onder FLOCK. HACKER accepteert alleen
+ exacte signaturen, en juist dat maakt een alert hier de moeite waard.
+
+ -----------------------------------------------------------------------------
+ DEAUTH — WiFi deauthentication / disassociation flood
+ -----------------------------------------------------------------------------
+ Helemaal geen signatuur. Herkend aan de rate, dus aan gedrag:
+   6 deauth/disassoc frames binnen een window van 3000 ms
+   daarna 15000 ms cooldown voordat het opnieuw kan afgaan
+ Dit vangt de aanval, niet de hardware van de aanvaller — het werkt dus ook
+ tegen een tool die nog nooit eerder is gezien.
+
+ -----------------------------------------------------------------------------
+ EVILTWIN — rogue / gespooft access point
+ -----------------------------------------------------------------------------
+ Ook op gedrag: één SSID die vanaf twee verschillende BSSIDs wordt
+ uitgezonden, waarbij de geadverteerde encryptie niet overeenkomt. Een echt
+ AP en een nabootser die dezelfde netwerknaam claimen kunnen niet allebei
+ de waarheid spreken over hun beveiliging.
+
+ -----------------------------------------------------------------------------
+ UNKNOWN
+ -----------------------------------------------------------------------------
+ Al het overige dat tijdens een scan wordt gezien. Zichtbaar in RAW SCAN,
+ maar er wordt geen alert op gegeven.
+
+
+===============================================================================
+ DEEL VIER — WAT HET NIET DOET
+===============================================================================
+
+ - Geen GPS. Het weet en registreert nooit waar je bent.
+ - Het gaat nooit een netwerk op om te scannen. Scannen is volledig passief.
+ - Het verstuurt nooit een BLE scan request. Het probet, wekt of meldt zich
+   niet bij wat het detecteert.
+ - De central/peripheral BLE roles zijn eruit gecompileerd — het kan nergens
+   verbinding mee maken, en niets kan er verbinding mee maken.
+ - Alleen 2.4 GHz. Een apparaat dat alleen 5 GHz gebruikt is onzichtbaar.
+ - Geen account, geen telemetrie, geen cloud, geen analytics.
+ - WiFi wordt alleen gebruikt voor iets waar je expliciet om vraagt: een
+   update-check of het downloaden van firmware.
+
+
+===============================================================================
+ DEEL VIJF — WAT HET DOET MET WAT HET VINDT
+===============================================================================
+
+ MAIN / SCAN       Achtergrond, mascotte Squachy, live tellers per type.
+                   Knoppen: [ SCAN ]  [ LOG ]  [ DESK ]
+ ALERT             Schermvullend, in de kleur van de detectie: type,
+                   vendor, de uitgezonden naam van het apparaat, MAC,
+                   kanaal, signaalmeter, instrument grid. Tik om weg te
+                   klikken, of het verdwijnt na 60 s.
+                   SNOOZE dempt één apparaat tot de volgende herstart.
+                   AUTO SNOOZE: na vijf onderbrekingen moet een apparaat
+                   dichterbij komen voordat het opnieuw mag onderbreken.
+ LOG               Doorlopend logboek van 200 detecties.
+ DIARY             Wat het apparaat in de loop van de tijd heeft gezien.
+ RAW SCAN          Handmatige BLE/WiFi-scanner — alles in de buurt, niet
+                   alleen bekende signaturen.
+ HUNT              Live signaalsterktemeter voor een gekozen doel, om het
+                   te kunnen uitlopen.
+ WATCH ALERT       Een gemarkeerd doel komt weer in bereik.
+ BINGO             Bingokaart met detecties.
+ DETECTION FILTER  Per type aan/uit.
+ IGNORED DEVICES   Gedempte apparaten.
+ DESK MODE         Bureauklok: grote sevensegment-tijd, datum, focus timer.
+ SD LOGGING        Met een kaart: squachwatch-<dag>.log, CSV
+                   ts,type,rssi,mac,channel,vendor,ssid
+                   (Niet op de Guition JC3248W535EN — geen bruikbare
+                   kaartsleuf.)
+
+
+===============================================================================
+ DEEL ZES — SQUACHMESH (BOARD NAAR BOARD)
+===============================================================================
+
+ Boards vinden elkaar en praten met elkaar via BLE advertisements — daarom
+ blijft de BROADCASTER role wél meegecompileerd. Versleuteld met een
+ gedeelde vijfwoordenzin. Geen internet, geen pairing-server.
+
+ DETECT            Andere boards in de buurt; hun Squachy komt op bezoek.
+ MESSAGES          Korte berichten naar je squad, rode bubbel met de naam
+                   van de afzender, leesbevestigingen, standaardzinnen of
+                   een QWERTY-toetsenbord.
+ SQUAD             Iedereen in bereik plus de inbox; leden die jouw zin
+                   hebben staan als MEMBER.
+ ADD TO SQUAD      Toetreden zonder te typen: beide boards tonen dezelfde
+                   vier cijfers, je bevestigt persoonlijk, en de zin gaat
+                   verzegeld over. Verslaat een derde board dat zich
+                   ertussen probeert te wringen.
+ PHRASE            De vijfwoordenzin rollen, tonen of intypen.
+ HUNT A MEMBER     De signaalmeter op een ander board richten.
+ Replay-bescherming: counters overleven een crash, en elk board
+ controleert bij het opstarten zijn cipher tegen bekende test vectors
+ (MeshCrypto self-test).
+
+
+===============================================================================
+ DEEL ZEVEN — SECURITY, UPDATES, DE REST
+===============================================================================
+
+ PIN LOCK          Vergrendelt het board. Een vergrendeld board geeft noch
+                   zijn zin, noch zijn squad, noch zijn log prijs.
+ UPDATE CONSENT    Een board gehoorzaamt update-nudges omdat het jouw zin
+                   heeft; via SECURITY kun je dat uitzetten.
+ WIFI UPDATE       Scannen, opgeslagen netwerk op, downloaden, installeren.
+ BLUETOOTH UPDATE  Vanuit een browser over BLE.
+ UPDATE CHECK      Vraagt bij het opstarten of er een nieuwere release is.
+                   Meldt alleen, installeert nooit. Uit te zetten.
+ UPDATE SQUAD      Zegt elk board in bereik dat het moet updaten, verzegeld
+                   met de zin.
+ TWEE APP SLOTS    1.92 MB elk. Een update landt in het reserve-slot
+                   terwijl het huidige nog draait; je kunt terugschakelen.
+ SIGNED PER BOARD  Een image voor een ander display wordt geweigerd in
+                   plaats van geïnstalleerd als een wit scherm.
+ Instellingen, PINs en mesh-koppelingen overleven updates — NVS wordt nooit
+ gewist.
+
+ OUTFITS           14 kostuums. De meeste verdien je met het aantal
+                   detecties; vier zitten verstopt achter dingen die
+                   niemand je vertelt.
+ PET               Squachy heeft stemmingen, reacties en een leven.
+ STATUS LIGHT      RGB-LED met eigen instellingen en een TEST van zes
+                   seconden.
+ CLOCK             Via USB gezet, of overgenomen van het eerste squadlid
+                   dat het hoort — elke squad-hello draagt de klok en zone
+                   van de afzender mee.
+ POWER SAVER       Helderheid, dimmen, accu-instellingen.
+
+
+===============================================================================
+ DEEL ACHT — HARDWARE
+===============================================================================
+
+ Board                              Scherm        Driver     Touch        Env
+ ---------------------------------- ------------- ---------- ------------ ------------
+ Sunton ESP32-2432S028R "CYD"       2.8" 240x320  ST7789     XPT2046 res  cyd
+ Sunton ESP32-2432S028R "CYD"       2.8" 240x320  ILI9341    XPT2046 res  cyd-ili9341
+ Sunton ESP32-2432S024R RL Phantom  2.4" 240x320  ILI9341    XPT2046 res  rlphantom-r
+ Sunton ESP32-2432S024C RL Phantom  2.4" 240x320  ILI9341    CST820 cap   rlphantom
+ AWOK ESP32-Marauder V6.1           2.4" 240x320  ILI9341    XPT2046 res  awok
+ Sunton ESP32-3248S035              3.5" 480x320  ST7796     XPT2046 res  cyd35 *
+ Guition JC3248W535EN               3.5" 320x480  AXS15231B  AXS15231B    jc3248 **
+                                                  QSPI       capacitive
+
+ *  Bevroren upstream en boot-loopt op echte hardware. Niet aanbevolen.
+ ** ESP32-S3, geen ESP32. Toegevoegd door deze fork. Zie
+    docs/JC3248W535EN.md.
+
+ De twee 2.8"-regels zijn hetzelfde fysieke board — het werd geleverd met
+ het ene of het andere paneel, en je kunt ze niet uit elkaar houden zonder
+ er één te flashen en te kijken.
+
+ FLASHEN
+   CYD en andere ESP32-boards:  https://squachwatch.com/  (browser)
+   Guition JC3248W535EN:        niet op de web flasher — het is een
+                                ESP32-S3, en ESP Web Tools weigert een chip
+                                die niet bij het manifest past.
+     Kant-en-klaar: firmware/  — vier .bin-bestanden en één esptool-commando
+     Vanaf broncode:
+                  git clone https://github.com/bsid3z/countergaze
+                  cd countergaze
+                  pio run -e jc3248 -t upload
+     Druk daarna op RESET — de reset van esptool zelf werkt niet op dit
+     board.
+     Komt hij er niet in? Houd BOOT ingedrukt, tik RESET, laat BOOT los.
+     Standaard geen USB-console, met opzet: de USB Serial/JTAG-unit van de
+     S3 reset de chip zodra een host de poort opent, en met USB CDC aan en
+     niets dat de buffer leegtrekt blokkeert de firmware in setup(). Bouw
+     -e jc3248-debug als je een console wilt.
+
+
+===============================================================================
+ DEEL NEGEN — VOOR ONTWIKKELAARS
+===============================================================================
+
+ PC EMULATOR   sim/ compileert de echte src/ tegen shims en rendert echte
+               frames; draait ook in een browser via WebAssembly. Elke
+               schermafbeelding in de docs is firmware-output, geen mockup.
+ HOST TESTS    make -C test — de decoders, de signatuurtabellen, en de
+               getrouwheid van de emulator aan de display library.
+               Linux/macOS: src/signatures.cpp gebruikt strcasestr (glibc),
+               en gfx/TFT_eSPI.h wil -D_USE_MATH_DEFINES op MinGW.
+ CI            Bij elke push: bouwt alle boards, draait de tests, bouwt de
+               emulator en rendert een frame.
+
+===============================================================================
