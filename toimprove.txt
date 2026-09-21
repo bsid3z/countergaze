@@ -1,0 +1,313 @@
+===============================================================================
+ SquachWatch — how the BLE side works, what is missing, and what to do next
+===============================================================================
+
+ A working note, not a spec. Everything here was read out of the source or
+ measured, and the file/line references are there so the next person can
+ disagree with the conclusions rather than re-derive the facts.
+
+ Written against this fork (bsid3z/countergaze) of skizzophrenic's
+ SquachWatch-CYD. Most of what follows applies to upstream unchanged.
+
+
+===============================================================================
+ PART ONE — HOW IT SEES BLE AT ALL
+===============================================================================
+
+ src/detection.cpp:90   class BleScanCallbacks : public NimBLEScanCallbacks
+
+ Two entry points, and which one is used matters:
+
+   onDiscovered()   fires on EVERY advert, before any reply
+   onResult()       fires once the library has a device's full data
+
+ Counting happens in onDiscovered, deliberately. The comment in the source
+ gives the measured reason:
+
+     "counted at onResult, 200 unanswering adverts a second read as a
+      quiet room right up to the crash"
+
+ In an active scan a device that never answers is not handed to onResult
+ until the reply times out — so the devices that fill the heap are exactly
+ the ones a count at onResult cannot see.
+
+ From each advert it reads:
+   - the advertiser's MAC              -> OUI lookup (77 entries)
+   - 16-bit service UUIDs              -> UUID table (15 entries)
+   - manufacturer data: company ID     -> company table (7 entries)
+     and then the payload              -> iBeacon / Find My / Remote ID checks
+   - the advertised device name        -> name matching
+   - RSSI                              -> signal meter, proximity logic
+
+ -----------------------------------------------------------------------------
+ The scan mode adapts, and it is about heap, not about threats
+ -----------------------------------------------------------------------------
+ src/detection.cpp:838-860
+
+   SCAN_ACTIVE_BELOW    50 adverts/s   quiet enough to start asking
+   SCAN_PASSIVE_ABOVE  300 adverts/s   too loud to keep asking
+   SCAN_ACTIVE_BLOCK_B 8192 bytes      the free block an active scan needs
+   SCAN_MODE_SETTLE_MS 5000            listen this long before the first change
+   SCAN_MODE_DWELL_MS  30000           and this long between changes
+
+ Passive is the default and the safe state. Active costs heap because
+ replies get buffered; under a flood that was eating a 14 KB block in under
+ a second. The 300 figure was raised from 90 after measuring roughly 3 KB
+ of cost under a 200-a-second flood.
+
+ What passive loses: only what a device says when ASKED — some names, and
+ a squad message.
+
+
+===============================================================================
+ PART TWO — THE GAP: BLE SPAM IS MEASURED, SURVIVED, AND NOT REPORTED
+===============================================================================
+
+ This is the single biggest hole in the product, and it is a small one to
+ close because the hard part is already built.
+
+ THE ASYMMETRY
+   WiFi attacks are detected behaviourally, with no signature at all:
+     DEAUTH    6 deauth/disassoc frames in 3000 ms, 15000 ms cooldown
+     EVILTWIN  one SSID from two BSSIDs disagreeing about encryption
+   BLE attacks are not detected at all. There is no BLE_SPAM in
+   DetectionType (include/state.h) and nothing in detection.cpp looks for
+   one. Checked; it is absent.
+
+ WHAT ALREADY EXISTS
+   s_advRate (src/detection.cpp:855) is adverts/s over the last second.
+   s_advKind[] counts adverts by HCI advert type in onDiscovered.
+   The code was explicitly tested against spam — the source says so:
+     "measured, the fake flood plus a Flipper"
+
+ SO TODAY
+   A Flipper running BLE spam next to you:
+     - IS caught as HACKER, if it also advertises its own UUIDs / company ID
+     - the SPAM ITSELF is invisible. The board quietly switches to passive
+       scanning and says nothing.
+
+   For a device whose whole purpose is announcing hostile radios in the
+   room, that is the wrong silence.
+
+ WHY IT IS THE RIGHT NEXT FEATURE
+   - the measurement exists; only the decision and the alert are missing
+   - DEAUTH is the pattern to copy, including the cooldown
+   - behavioural, so it catches tools nobody has a signature for yet
+   - one new DetectionType, one threshold, no new tables, no flash to speak of
+
+ WHAT HAS TO BE GOT RIGHT FIRST (do not skip this)
+   A detector that cries wolf in a train station is worse than one that
+   says nothing. Before writing code, establish:
+     - what a busy but innocent room actually reads (a café, a train, a
+       conference). The existing console line already prints adverts/s, so
+       this is a walk with a board, not a guess.
+     - whether to threshold on RATE alone or on the shape of it. Real spam
+       is typically many EPHEMERAL advertisers — a flood of MACs each seen
+       once — rather than a few loud ones. Distinct-MACs-per-second is
+       probably the stronger signal and is cheap to count.
+     - the Apple/Samsung/Google pairing-popup variant is a payload shape,
+       not just a rate: many adverts carrying those company IDs with
+       nonsense payloads. That is a second, higher-confidence detection.
+     - a cooldown, so one event is one alert.
+     - interaction with the passive switch: above 300 adverts/s the scan
+       goes passive, which is exactly when spam is happening. Make sure
+       the detection does not depend on data passive mode cannot see.
+
+
+===============================================================================
+ PART THREE — HACKS, AS DETECTED TODAY
+===============================================================================
+
+ Flipper Zero     BLE service UUIDs 0x3081, 0x3082, 0x3083 (one per case
+                  colour, three fixed values, so an exact match)
+                  BLE company ID 0x0E29 (Flipper Devices Inc.)
+                  WiFi OUI 0C:FA:22
+                  BT name contains "Flipper"
+ WiFi Pineapple   SSID prefix "Pineapple_", WiFi OUI 02:C0:CA, 02:13:37
+ ESP deauthers    SSID prefix "pwned"
+ Pwnagotchi       a JSON blob in the beacon's tagged parameters, keyed on
+                  "pwnd_tot"
+ Deauth flood     rate, see above
+ Evil twin        behaviour, see above
+
+ NOT in the HACKER bucket, on purpose: bare Espressif and other generic
+ silicon. A nyanBOX, an ESP32 Marauder and a SquachWatch are the same chip,
+ and 16 Espressif prefixes already sit under FLOCK.
+
+
+===============================================================================
+ PART FOUR — MESSAGES (SQUACHMESH)
+===============================================================================
+
+ Boards talk INSIDE BLE advertisements — the same packets the scanner is
+ already reading. No connections: central and peripheral roles are compiled
+ out, so the firmware cannot open or accept one.
+
+   include/squachmesh.h:33   COMPANY_ID = 0xFFFF
+   include/squachmesh.h:37   MAGIC = { 0x53, 0x51, 0x4D, 0x31 }  "SQM1"  presence
+   include/meshmsg.h:118     MAGIC = { 'S', 'T' }                        messages
+
+ Encrypted with a key derived from the five-word phrase and the salt
+ "SquachWatch/msg/v1", with replay counters that survive a crash, and a
+ cipher self-test against known vectors at every boot.
+
+ WORTH KNOWING: 0xFFFF is officially
+
+   "Bluetooth SIG Specification Reserved Default Vendor ID for Remote
+    Devices Without Device ID Service Record"
+
+ — the reserved/unassigned value. A legitimate choice for a non-commercial
+ protocol, but it means SquachMesh adverts are indistinguishable BY COMPANY
+ ID from anything else using the reserved value. The SQM1 magic is what
+ actually identifies them, which is exactly why squachmesh.h says MAGIC is
+ not optional.
+
+
+===============================================================================
+ PART FIVE — WHAT THE BLUETOOTH SIG REGISTRY SAYS ABOUT OUR SIGNATURES
+===============================================================================
+
+ -----------------------------------------------------------------------------
+ Use the live YAML, not the PDF
+ -----------------------------------------------------------------------------
+   OFFICIAL, machine-readable, current:
+     https://bitbucket.org/bluetooth-SIG/public/raw/main/assigned_numbers/
+       company_identifiers/company_identifiers.yaml     4035 entries
+       uuids/member_uuids.yaml                           714 entries
+       uuids/service_uuids.yaml                           76 entries
+
+   The Assigned_Numbers.pdf on bluetooth.com is dated 2023-12-20 and is NOT
+   good enough for this. Three vendors the firmware already ships are absent
+   from it entirely: Meta Platforms Technologies, Luxottica, Flipper Devices.
+   Used as a verification source it would have declared three CORRECT
+   entries wrong.
+
+   The popular NordicSemiconductor/bluetooth-numbers-database mirror is
+   usable but was 14 assignments behind the official YAML when checked.
+
+ -----------------------------------------------------------------------------
+ Company IDs: all seven verify, zero mismatches
+ -----------------------------------------------------------------------------
+   0x004C  Apple, Inc.
+   0x09C8  XUNTONG                                  (Flock's BLE radio supplier)
+   0x01AB  Meta Platforms, Inc.
+   0x058E  Meta Platforms Technologies, LLC
+   0x0D53  Luxottica Group S.p.A
+   0x03C2  Snapchat Inc
+   0x0E29  Flipper Devices Inc.
+
+   And the warning in signatures.cpp is confirmed:
+   0x0FBA  Cosonic Intelligent Technologies Co., Ltd.  <- headsets, NOT Flipper.
+   ESP32 Marauder uses 0x0FBA and everything that copied it inherited the bug.
+
+ -----------------------------------------------------------------------------
+ Service UUIDs: only 5 of 15 are SIG-assigned
+ -----------------------------------------------------------------------------
+   SIG-assigned and verified:
+     0xFD5F  Meta Platforms Technologies, LLC   (Ray-Ban Meta)
+     0xFD5A  Samsung Electronics Co., Ltd.      (SmartTag)
+     0xFEAA  Google LLC                         (Find My Device / Eddystone)
+     0xFEED  Tile, Inc.
+     0xFEEC  Tile, Inc.
+
+   NOT SIG space — vendor-chosen values with no registry backing:
+     0x3081-0x3083  Flipper
+     0x3100-0x3500  Raven
+     0xFFFA         OpenDroneID  (convention, not an assignment)
+     0x1101         SPP — a Bluetooth CLASSIC SDP service class, a different
+                    registry entirely. Correct as used; just not this one.
+
+   The SIG member UUID allocation range is 0xFC26-0xFEFF. Everything above
+   is outside it. This is not a bug — it is provenance, and it maps onto the
+   confidence grading the project already does per signature. An audit could
+   surface it per row instead of leaving it implicit.
+
+ -----------------------------------------------------------------------------
+ Coverage: the absences are the interesting part
+ -----------------------------------------------------------------------------
+   These have NO BLE company ID registered at all:
+     Verkada, Avigilon, Dahua, Genetec, Flock, Eufy, Reolink, Ubiquiti,
+     Pebblebee, Hak5, Bosch Security
+
+   That is not a hole in our table. Cameras are WiFi devices and do not
+   advertise over BLE, which is precisely why the 77-entry WiFi OUI table
+   exists and is the right tool. It also explains 0x09C8: Flock has no
+   company ID, so the firmware keys on their BLE radio supplier instead.
+
+   Registered and currently unused (candidates for NAMES, not detections):
+     0x0E25  Hangzhou Hikvision Digital Technology
+     0x0C19  Arlo Technologies, Inc.
+     0x0870  Wyze Labs, Inc
+     0x04EC  Motorola Solutions
+     0x08C3  CHIPOLO d.o.o.
+
+   CAUTION: 0x023E is "Raven Industries" — agricultural equipment, NOT the
+   Raven gunshot detector. A tempting name match that would be simply wrong.
+
+
+===============================================================================
+ PART SIX — WHAT TO DO, IN ORDER
+===============================================================================
+
+ -----------------------------------------------------------------------------
+ TIER 1 — offer upstream now. Finished, tested, fixes upstream's own code.
+ -----------------------------------------------------------------------------
+   fillSpan + fillColumn      fillRect did one VIRTUAL drawPixel per pixel.
+                              Frame drawing 225 ms -> 86 ms on the S3; every
+                              CYD and the emulator gain proportionally.
+   fillprim_test              those primitives had ZERO coverage —
+                              shim_fidelity_test never calls a fill. The new
+                              test is proven to catch an injected off-by-one.
+   randomSeed(esp_random())   GPIO34 is not an ADC pin on an ESP32-S3, and a
+                              floating pin was a poor seed where it did work.
+   Doc fixes                  docs/FAQ.md says MIT; LICENSE is GPL-3.0.
+                              Someone could relicense in good faith. Plus 3
+                              broken links, ALPR 6->7 OUIs, and
+                              "76 rows / 32 High" -> 77 / 33.
+
+   The licence one is worth telling skizzophrenic about regardless of
+   whether any of the rest is wanted.
+
+ -----------------------------------------------------------------------------
+ TIER 2 — the work actually worth doing
+ -----------------------------------------------------------------------------
+   1. BLE SPAM DETECTION. See PART TWO. The measurement exists; the
+      detection does not. Biggest real gap in the product. Scope the
+      thresholds against real rooms BEFORE writing code.
+
+   2. SIGNATURE AUDIT SCRIPT. tools/, build-time only, zero flash, zero
+      runtime. Pulls the official SIG YAML and checks every company ID and
+      UUID in signatures.cpp against it, and flags which UUIDs are outside
+      SIG space. Turns the Flipper-vs-Cosonic comment from something someone
+      has to remember into something CI enforces.
+      NOTE: it fetches over the network, so in CI it should WARN, not
+      hard-fail — otherwise Bitbucket being briefly unreachable breaks a
+      build that has nothing wrong with it.
+
+ -----------------------------------------------------------------------------
+ TIER 3 — worthwhile, not urgent
+ -----------------------------------------------------------------------------
+   Vendor names in RAW SCAN. A curated few hundred company IDs, ~5-8 KB, so
+   an unknown advertiser reads "Bose" instead of a number. Must be a SEPARATE
+   table consulted only by mfgIdName(); lookupMfgId() must not see it, so it
+   is structurally incapable of creating a detection or moving a confidence
+   grade. Flash headroom as of this writing: 79.9% of the 1.92 MB slot used.
+
+   Windows test portability. src/signatures.cpp uses strcasestr (glibc) and
+   gfx/TFT_eSPI.h wants -D_USE_MATH_DEFINES on MinGW. Two small fixes would
+   let Windows contributors run the host suite at all.
+
+ -----------------------------------------------------------------------------
+ WHAT TO SKIP, AND WHY
+ -----------------------------------------------------------------------------
+   Adding company IDs as DETECTIONS. A company ID means "this vendor's radio
+   is nearby", not "this device is here" — the exact trap META already
+   documents, where Meta's company IDs match Quest headsets and are why META
+   is not graded High. Doing it wholesale manufactures low-confidence
+   detections, which is what the project's per-signature grading exists to
+   avoid.
+
+   Renaming anything. The salt, the NVS namespace and the log filename all
+   carry the project's name and none of them is a name.
+
+===============================================================================
