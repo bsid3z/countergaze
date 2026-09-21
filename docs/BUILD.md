@@ -38,12 +38,18 @@ pipx install platformio
 ## Get the code
 
 ```sh
-git clone https://github.com/skizzophrenic/SquachWatch-CYD
-cd SquachWatch-CYD
+git clone https://github.com/bsid3z/countergaze
+cd countergaze
 ```
 
+That is this fork, which is upstream plus support for the Guition
+JC3248W535EN. If you own a CYD and would rather have the original, clone
+`https://github.com/skizzophrenic/SquachWatch-CYD` instead — every board
+except the JC3248W535EN builds identically from either.
+
 If you don't have `git`, you can also download a ZIP from GitHub
-and unzip it.
+and unzip it. Note that a ZIP has no git history, so the firmware's
+version string falls back to `unknown` instead of a release number.
 
 ## Install the USB driver (Windows only)
 

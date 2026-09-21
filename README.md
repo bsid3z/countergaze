@@ -158,13 +158,20 @@ Three steps:
 1. Install [PlatformIO](https://platformio.org/) (CLI or VS Code extension).
 2. Clone the repo:
    ```sh
-   git clone https://github.com/skizzophrenic/SquachWatch-CYD
-   cd SquachWatch-CYD
+   git clone https://github.com/bsid3z/countergaze
+   cd countergaze
    ```
+   That is **this fork**, and it is what the JC3248W535EN steps below need —
+   upstream has no `jc3248` environment, so cloning
+   `skizzophrenic/SquachWatch-CYD` and then asking for that board fails.
+   If you own a CYD and want the original, clone upstream instead; every
+   other board builds identically from either.
 3. Build and flash:
    ```sh
    pio run -t upload
    ```
+   That builds the three CYD-family boards. **For the JC3248W535EN you must
+   pass `-e jc3248`** — see the section right below.
 
 The first build pulls the TFT_eSPI, XPT2046, and NimBLE-Arduino
 libraries; after that it's incremental.
