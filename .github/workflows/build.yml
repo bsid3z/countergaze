@@ -13,7 +13,11 @@ name: Build
 
 on:
   push:
-    branches: [master]
+    # master is upstream's branch; main is this fork's. Both, because a fork
+    # whose CI watches the wrong branch is CI that never runs -- this one sat
+    # at zero runs while every commit landed on the branch it was not looking
+    # at, which is indistinguishable from passing right up until it matters.
+    branches: [master, main]
     # Documentation and release notes cannot break a build, and the tag
     # workflow covers the release path already.
     paths-ignore:
