@@ -44,6 +44,12 @@ enum class Fail : uint8_t {
     WIFI_NOT_FOUND,
     WIFI_PASSWORD,
     NO_SITE,
+    // The site answered, and has no build for THIS board. Distinct from
+    // NO_SITE on purpose: a 404 used to be reported as "couldn't reach
+    // squachwatch.com", which sends somebody to debug a router that is
+    // working. The update URL is keyed on the build name, so any board
+    // whose environment is not published there gets this every time.
+    NO_BUILD_FOR_BOARD,
     NOT_SIGNED,
     LOW_MEMORY,
     TOO_OLD,

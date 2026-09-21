@@ -73,7 +73,7 @@ the glitchy SquachWatch wordmark.
 | `RAVEN` | Raven gunshot detector | Service UUIDs `0x3100`–`0x3500` |
 | `AIRTAG` | Apple AirTag / Find My trackers | Company ID `0x004C` + Find My payload check |
 | `DRONE` | Remote ID drones | Service UUID `0xFFFA`, then the ASTM F3411 message **decoded** — aircraft position, altitude, serial, and the operator's location |
-| `ALPR` | Motorola Solutions / Genetec plate readers | 6 WiFi OUI |
+| `ALPR` | Motorola Solutions / Genetec plate readers | 7 WiFi OUI (5 Motorola, 2 Genetec) |
 | `CAMERA` | Generic / covert IP cameras | 17 WiFi OUI (Wyze, Amazon, Tuya, Verkada, Avigilon, Axis, …) |
 | `SAMSUNG_TAG` | Samsung Galaxy SmartTag / SmartTag+ | BLE service UUID `0xFD5A` |
 | `GOOGLE_TAG` | Google Find My Device trackers (Chipolo, Pebblebee, Moto Tag) | BLE service UUID `0xFEAA` |
@@ -87,8 +87,8 @@ the glitchy SquachWatch wordmark.
 ### Confidence is per signature, not per type
 
 Every hardware prefix in the firmware was checked against the IEEE registry
-rather than against other detectors. Of 76 rows: **32 High, 4 Medium, 40
-Low**.
+rather than against other detectors. Of the 77 OUI rows: **33 High, 4
+Medium, 40 Low** — counted from `src/signatures.cpp`.
 
 That grading matters most on `FLOCK`, where exactly **one** of 29 prefixes is
 registered to Flock Safety and the rest are the generic Espressif and Liteon
@@ -128,11 +128,18 @@ here because this fork is the thing that added it.
 | Sunton ESP32-2432S024C (RL Phantom) | 2.4" 240×320 | ILI9341, SPI | CST820 capacitive | ESP32 | `rlphantom` |
 | AWOK ESP32-Marauder V6.1 | 2.4" 240×320 | ILI9341, SPI | XPT2046, shared bus | ESP32 | `awok` |
 | Sunton ESP32-3248S035 | 3.5" 480×320 | ST7796, SPI | XPT2046, shared bus | ESP32 | `cyd35` |
-| **Guition JC3248W535EN** | **3.5" 320×480** | **AXS15231B, QSPI** | **AXS15231B capacitive** | **ESP32-S3** | **`jc3248`** |
+| **[Guition JC3248W535EN](https://nl.aliexpress.com/item/1005007566315926.html)** | **3.5" 320×480** | **AXS15231B, QSPI** | **AXS15231B capacitive** | **ESP32-S3** | **`jc3248`** |
 
 The two 2.8" rows are the same physical board — it shipped with either panel,
 and the two cannot be told apart without flashing one and looking. `cyd35` is
 frozen upstream and boot-loops on real hardware; it is not recommended.
+
+**Where to buy the Guition JC3248W535EN** — the board this fork exists for:
+[listing 1](https://nl.aliexpress.com/item/1005007566315926.html) ·
+[listing 2](https://nl.aliexpress.com/item/1005007593889279.html).
+Check the model number on the listing before you order. `JC3248W535EN` is the
+3.5" 320×480 capacitive ESP32-S3 board in the row above; Guition sells several
+boards with near-identical part numbers and only this one is supported here.
 
 ## Web Flash
 
@@ -441,6 +448,20 @@ something newer knows without touching WiFi. Either way Squachy says it once
 on the main screen, the SYSTEM row reads UPDATE, and UPDATE FIRMWARE names
 the version until you install it.
 
+> **Not on the Guition JC3248W535EN.** The check asks squachwatch.com for
+> `manifest-<build>.json` — the URL carries the build name — and that site
+> cannot host a board upstream does not build. It is a guaranteed 404, so the
+> boot check is compiled out rather than spending a WiFi join and a second of
+> boot on it every start. The squad-hello route still works, and so does the
+> manual **UPDATE OVER WIFI** screen, which now says *"the site has no update
+> for this board"* instead of blaming your internet connection.
+>
+> To enable it, publish this fork's `web-flasher/` output somewhere and point
+> the build at it with `-DOTA_WIFI_BASE='"http://your.host/"'`. It must be
+> plain HTTP: `ota_wifi.cpp` uses a bare `WiFiClient` with no TLS, so an
+> HTTPS-only host such as GitHub Pages will not work without giving it a
+> secure client first.
+
 **WIFI NETWORKS** on the SYSTEM page is where the board keeps the networks it
 knows: up to six, with USE marking the one it tries first. ADD picks one from
 a scan and takes the password on the board's keyboard; it is not checked by
@@ -563,45 +584,108 @@ SquachWatch-CYD/
 
 ## Changes from upstream
 
-The complete list, against
-[skizzophrenic/SquachWatch-CYD](https://github.com/skizzophrenic/SquachWatch-CYD).
-No feature was added or removed, and no board upstream supports behaves
-differently.
+Everything this fork alters, and why. Nothing else in the tree is touched:
+no feature added or removed, no branding renamed, and no board upstream
+supports behaves differently.
 
-**New: the Guition JC3248W535EN.** `[env:jc3248]` and `[env:jc3248-debug]`,
-plus `src/jc3248_panel.cpp` and `include/jc3248_panel.h` — the QSPI transport
-for its AXS15231B panel, which TFT_eSPI cannot drive at all. Drawing goes
-through the portable rasterizer that already existed in `sim/` for the web
-emulator; this fork moved it to `gfx/` so the firmware and the emulator share
-one copy, and taught it to push to real glass. `src/cap_touch.cpp` gained the
-AXS15231B's I2C touch protocol alongside the existing CST816. Full write-up in
-[docs/JC3248W535EN.md](docs/JC3248W535EN.md).
+### New: the Guition JC3248W535EN
 
-**Fixed: `fillRect` drew one pixel at a time.** In the shared rasterizer,
-`fillRect` → `drawFastHLine` → a *virtual* `drawPixel` per pixel. A new
-`fillSpan` writes the row directly. This helps every board and the emulator
-equally; on the JC3248W535EN it took frame drawing from 225 ms to 86 ms.
+| Added | Why |
+|---|---|
+| `[env:jc3248]`, `[env:jc3248-debug]` | ESP32-S3 target. Upstream has no environment for this board, so a clone of upstream cannot build it at all. |
+| `src/jc3248_panel.cpp`, `include/jc3248_panel.h` | Its panel is an AXS15231B on a **four-lane QSPI** bus. TFT_eSPI cannot drive that — not a missing driver, a bus it does not speak — so something had to own the transport. |
+| `sim/TFT_eSPI.h` → `gfx/TFT_eSPI.h` | The emulator's portable rasterizer was already drawing every screen of this firmware; it just had no way out to real glass. Moving it makes one copy serve the emulator, the host tests **and** this board, so a drawing fix lands everywhere at once instead of drifting. |
+| AXS15231B touch in `src/cap_touch.cpp` | Capacitive, I2C `0x3B`, a command/response protocol rather than a register map. The existing CST816 path could not read it. |
+| `firmware/`, `manifest-jc3248.json`, picker entry, release-workflow steps | Owning the board means shipping it: prebuilt binaries for people without a toolchain, and a release that actually contains it. |
 
-**Fixed: three GPIO writes that are fatal on an ESP32-S3.** `setup()` drove
-pins 21, 27 and 32 high to cover every board's possible backlight. On an S3,
-GPIO26–32 are the internal flash and PSRAM lines, so this reconfigured the bus
-the CPU was running from — an interrupt-watchdog boot loop before `tft.init()`.
-Now skipped on that board; untouched everywhere else.
+Full detail in **[docs/JC3248W535EN.md](docs/JC3248W535EN.md)**, including three
+dead ends recorded so nobody repeats them.
 
-**Changed, mechanically:** `sim/TFT_eSPI.h` and its font tables moved to
-`gfx/` (one copy, two consumers — `sim/Makefile` and `test/Makefile` follow it);
-`FastSprite` and `FramePush` now gate on whether the real TFT_eSPI is present
-rather than on `ARDUINO_ARCH_ESP32`, since the S3 build has the architecture but
-not the library; `SdLog::begin()` returns early on the JC3248W535EN, which has
-no usable card slot and whose fallback path would have claimed GPIO19 — USB D−
-on an S3; one anonymous struct in `main.cpp` was given a name so it compiles at
-C++17, which the rasterizer needs. CI builds the new board.
+### Bugs found and fixed — these affect every board
 
-**Deliberately unchanged:** the mesh key-derivation salt
-(`"SquachWatch/msg/v1"`), the `"squachwatch"` NVS namespace, and the
-`squachwatch-<day>.log` filename. All three contain the project's name but are
-protocol or persisted state — renaming them would break mesh interop with
-upstream boards, orphan saved settings, and fail `MeshCrypto::selfTest` at boot.
+| Bug | Why it mattered |
+|---|---|
+| `fillRect` → `drawFastHLine` → a **virtual `drawPixel` per pixel** | A full-screen fill cost 225 ms on the S3. `fillSpan` writes the row instead. The emulator and every CYD get the same speedup. |
+| `drawFastVLine` had the same shape | Fixed the same way, with `fillColumn`. Frame time on the JC3248W535EN went 407 ms → 137 ms overall. |
+| **Neither had a test** | `shim_fidelity_test` covers glyph cells and ellipse radii and never calls a fill primitive, so CI was green on untested code. `test/fillprim_test.cpp` now draws every case twice — fast path vs `drawPixel` — and compares buffers: every edge, zero and negative lengths, viewports, 675 colours, both depths. Verified it fails when `fillColumn`'s clip is moved by one. |
+| `randomSeed(analogRead(34))` | GPIO34 is not an ADC pin on an ESP32-S3: it logged an error, returned 0, and the board replayed the **same "random" sequence every boot**. Now `esp_random()`, the hardware TRNG — no pin, and a better seed than a floating input was on the boards where it worked. Nothing security-relevant used `random()`. |
+| A 404 was reported as *"couldn't reach squachwatch.com"* | The update URL carries the build name, so any board whose build is not published there 404s — and the message sent people to debug a working router. New `NO_BUILD_FOR_BOARD` failure says what actually happened. |
+
+### Bugs found in upstream's own docs
+
+These predate this fork and are worth sending back to skizzophrenic.
+
+| Bug | Why |
+|---|---|
+| `docs/FAQ.md` said **"MIT-licensed"** | `LICENSE` is GPL-3.0 and the README says so three times. Someone could have relied on the FAQ and relicensed in good faith. |
+| `docs/FAQ.md` linked `docs/BUILD.md` *from inside* `docs/` | Resolves to `docs/docs/…`. Three dead links. |
+| README said ALPR has **6** OUIs, and **"76 rows: 32 High"** | The table holds **7** and **77 / 33 High**. One ALPR prefix was added and none of the three numbers describing the table were updated. |
+
+### Changed because an S3 is not an ESP32
+
+| Change | Why |
+|---|---|
+| `setup()` no longer drives GPIO 21/27/32 high on this board | On a CYD those are candidate backlight pins and the spare ones are harmless. On an ESP32-S3, **GPIO26–32 are the internal flash and PSRAM lines** — two of those writes reconfigured the bus the CPU was executing from. Interrupt-watchdog boot loop, every boot, before `tft.init()`. GPIO21 is also QSPI D0 here. |
+| `SdLog::begin()` returns early on `jc3248` | No usable card slot, and the fallback path calls `SPI.begin(18, 19, 23, 5)` — **GPIO19 is USB D−** on an S3. It would have taken out the USB console to mount a card that is not there. |
+| `FastSprite`/`FramePush` gate on `SQW_REAL_TFT_ESPI`, not `ARDUINO_ARCH_ESP32` | Both reach into the real TFT_eSPI's internals. This build has the architecture but not the library. |
+| USB CDC **off** by default; `jc3248-debug` turns it on | The S3's USB Serial/JTAG unit resets the chip whenever a host opens the port, and with CDC on and nothing draining the buffer the firmware blocks in `setup()` — it ran on a PC and hung on a power bank. |
+| Boot-time update check skipped on `jc3248` | `manifest-jc3248.json` is a guaranteed 404 on upstream's site, which cannot host a board it does not build. Paying a WiFi join and a second of boot for that answer, every boot, is worse than not asking. The manual UPDATE OVER WIFI screen still runs. |
+| `createSprite()` checks the largest free block first | `main.cpp` has a tested no-frame-buffer path. The PSRAM allocator returns null on exhaustion, and with exceptions off `std::vector` writes through it and panics — so that path could never run. |
+| One anonymous struct in `main.cpp` given a name | GCC 8 at C++17 will not assign `{}` to an unnamed type, and the rasterizer needs C++17. Identical in every other build. |
+| `pushFrame()` logs a dropped frame | Refusing a wrongly-shaped buffer is right; doing it silently looks like a hang on the glass. |
+| CI builds `jc3248`; `branches: [master, main]` | The workflow watched only upstream's branch name, so on this fork it had **zero runs** — indistinguishable from passing. |
+| Clone URLs point here | Both walkthroughs said to clone upstream, then told you to build `-e jc3248`, which upstream has no environment for. |
+
+### Porting another ESP32-S3 board is now mostly done
+
+Worth stating plainly, because it was not obvious going in: **almost none of
+this port is about the JC3248W535EN.** The board-specific part is one file.
+Everything else was making an ESP32-S3 work at all, and that is reusable.
+
+**Already generic — you get these for free:**
+
+- `gfx/TFT_eSPI.h` as a *real driver* under `SQW_HW_PANEL`, not a preview.
+  Any panel TFT_eSPI cannot drive can be reached this way: the whole UI draws
+  into an RGB565 buffer and hands it to one push function.
+- The PSRAM allocator and the `createSprite()` free-block check — any S3 with
+  external RAM needs both, since a full frame buffer does not fit in SRAM.
+- The **GPIO26–32 guard**. Upstream drives 21/27/32 high to find a backlight;
+  on any S3 those are the internal flash and PSRAM lines. This is the bug that
+  boot-looped the board before `tft.init()`, and it is fixed for all S3 builds,
+  not just this one.
+- `FastSprite`/`FramePush` gating on `SQW_REAL_TFT_ESPI` rather than on the
+  architecture, so they stay out of any build without the real library.
+- USB CDC off by default, and the reason written down — every S3 with native
+  USB has the reset-on-open and the blocking-buffer problem.
+- The SD guard, the C++17 fix, the flash offsets (bootloader at `0x0`, not
+  `0x1000`), `--no-stub`, and CI that builds an S3 target.
+
+**What a new S3 board still needs — roughly a day, not a project:**
+
+1. A transport like `src/jc3248_panel.cpp`: bring the panel up, and push one
+   RGB565 buffer to it. ~150 lines.
+2. A pin header like `include/jc3248_user_setup.h`.
+3. An `[env:...]` modelled on `[env:jc3248]`.
+4. A touch branch in `src/cap_touch.cpp`, if its controller is new.
+
+If the panel is ordinary SPI and TFT_eSPI supports it, you need even less —
+drop `SQW_HW_PANEL` and the normal TFT_eSPI path works, with only the S3
+hardware guards above mattering.
+
+The one thing that does **not** generalise is the dead ends in
+[docs/JC3248W535EN.md](docs/JC3248W535EN.md): no partial window writes and
+MADCTL ignored are facts about the AXS15231B controller, not about the S3.
+
+### Deliberately NOT changed
+
+| Left alone | Why |
+|---|---|
+| `"SquachWatch/msg/v1"` key-derivation salt | Renaming it breaks mesh interop with every existing board and fails `MeshCrypto::selfTest` at boot. It contains the project's name; it is not a name. |
+| `"squachwatch"` NVS namespace | Renaming orphans saved settings on existing devices. |
+| `squachwatch-<day>.log` filename | Renaming orphans existing SD logs. |
+| All branding — SquachWatch, Squachy, SquachMesh, SquachWare | Not ours. The fork adds a board; it does not rebrand someone else's project. |
+| Upstream's commit history | 348 commits, unmodified. The git log is the strongest attribution there is. |
+| Links to `squachwatch.com` and `talkingsasquach.com`, and the `funding_url` | Those point at the original author on purpose. |
 
 ## License
 

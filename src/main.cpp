@@ -2230,7 +2230,17 @@ void setup() {
     bool bootCheckRan = false;
     if (takeBootCheckSkip()) {
         Serial.println("[ota] boot check skipped: the frame buffer failed after the last one");
+#if defined(SQW_NO_UPDATE_HOST)
+    // Nobody publishes this board's build. The check asks for
+    // manifest-<build>.json by name, so it can only 404 -- and paying for
+    // that answer costs a WiFi join, a second of boot, and the backlight
+    // dipped for the radio, on every single start. The manual UPDATE OVER
+    // WIFI screen still runs, and now says what a 404 actually means;
+    // this only skips the automatic one.
+    } else if (false) {
+#else
     } else if (Settings::updateCheck() && !Security::locked() && OtaCore::available() && OtaWifi::hasSaved()) {
+#endif
         bootCheckRan = true;
         // The backlight down first, for the same reason it goes down at the
         // radio start below: WiFi's RF calibration plus a full backlight is

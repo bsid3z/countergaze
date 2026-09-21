@@ -144,6 +144,7 @@ const char* failWords(Fail f) {
         case Fail::WIFI_NOT_FOUND:  return "Couldn't find that WiFi network. Move closer to the router and try again.";
         case Fail::WIFI_PASSWORD:   return "Couldn't join that WiFi network. Check the password and try again.";
         case Fail::NO_SITE:         return "Joined WiFi, but couldn't reach squachwatch.com. Check the internet connection.";
+        case Fail::NO_BUILD_FOR_BOARD: return "The site has no update for this board. Nothing is wrong with your WiFi.";
         case Fail::NOT_SIGNED:      return "The latest release can't be installed over the air yet. Use the USB flasher.";
         case Fail::TOO_OLD:         return "That firmware is older than the one running. Nothing was changed.";
         case Fail::LOW_MEMORY:      return "Not enough memory to download. Restart the board and try again.";

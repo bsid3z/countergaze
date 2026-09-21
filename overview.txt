@@ -77,9 +77,9 @@
 
  1. WIFI OUI PREFIX          77 entries. First 3 bytes of a MAC, matched
                              against the IEEE registry. Exact match.
- 2. BLE 16-BIT SERVICE UUID  16 entries. Exact match.
- 3. BLE COMPANY ID           8 entries. Bluetooth SIG assigned. Exact.
- 4. WIFI SSID PREFIX         10 entries, case-insensitive prefix match.
+ 2. BLE 16-BIT SERVICE UUID  15 entries. Exact match.
+ 3. BLE COMPANY ID           7 entries. Bluetooth SIG assigned. Exact.
+ 4. WIFI SSID PREFIX         8 entries, case-insensitive prefix match.
  5. BT CLASSIC NAME          7 exact names + 5 substring matches.
  6. PAYLOAD DECODE           iBeacon header, Apple Find My, ASTM F3411
                              Remote ID, Pwnagotchi JSON. Structure is
@@ -88,10 +88,15 @@
                              matched against a table — these are detected
                              from what the traffic is DOING.
 
- Confidence is graded PER SIGNATURE, not per type. Of 76 signature rows:
- 32 High, 4 Medium, 40 Low. See docs/DETECTIONS.md for each one's
+ Confidence is graded PER SIGNATURE, not per type. Of the 77 OUI rows:
+ 33 High, 4 Medium, 40 Low. See docs/DETECTIONS.md for each one's
  provenance. Every hardware prefix was checked against the IEEE registry
  rather than copied from another detector.
+
+ (The README says 76 rows and 32 High. It is one row out of date -- an ALPR
+ prefix was added without updating the three numbers that describe the
+ table. Counted from src/signatures.cpp, which is the only copy that can
+ be wrong in a way that matters.)
 
 
 ===============================================================================

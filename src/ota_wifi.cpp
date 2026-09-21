@@ -344,7 +344,12 @@ bool check() {
     int code = getSmall(String("manifest-") + OtaCore::buildName() + ".json", body, sizeof body - 1, len);
     if (code != 200) {
         Serial.printf("[ota] manifest: HTTP %d\n", code);
-        fail(Fail::NO_SITE);
+        // A 404 is not an unreachable site. It means this board's build is
+        // not published where it is looking -- the URL carries the build
+        // name, so a board whose environment nobody uploads gets this on
+        // every check. Saying "check the internet connection" there is a
+        // wrong answer to a question the person did not ask.
+        fail(code == 404 ? Fail::NO_BUILD_FOR_BOARD : Fail::NO_SITE);
         return false;
     }
     body[len] = '\0';

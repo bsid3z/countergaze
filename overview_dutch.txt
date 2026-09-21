@@ -80,9 +80,9 @@
  1. WIFI OUI PREFIX          77 entries. De eerste 3 bytes van een MAC,
                              gecontroleerd tegen het IEEE-register.
                              Exacte match.
- 2. BLE 16-BIT SERVICE UUID  16 entries. Exacte match.
- 3. BLE COMPANY ID           8 entries. Toegekend door de Bluetooth SIG.
- 4. WIFI SSID PREFIX         10 entries, hoofdletterongevoelige prefix.
+ 2. BLE 16-BIT SERVICE UUID  15 entries. Exacte match.
+ 3. BLE COMPANY ID           7 entries. Toegekend door de Bluetooth SIG.
+ 4. WIFI SSID PREFIX         8 entries, hoofdletterongevoelige prefix.
  5. BT CLASSIC NAME          7 exacte namen + 5 substring-matches.
  6. PAYLOAD DECODE           iBeacon header, Apple Find My, ASTM F3411
                              Remote ID, Pwnagotchi JSON. De structuur wordt
@@ -91,10 +91,15 @@
                              tegen een tabel gematcht — dit wordt herkend
                              aan wat het verkeer DOET.
 
- Confidence wordt PER SIGNATUUR bepaald, niet per type. Van 76 signatuur-
- regels: 32 High, 4 Medium, 40 Low. Zie docs/DETECTIONS.md voor de
+ Confidence wordt PER SIGNATUUR bepaald, niet per type. Van de 77 OUI-
+ regels: 33 High, 4 Medium, 40 Low. Zie docs/DETECTIONS.md voor de
  herkomst van elke regel. Elke hardware-prefix is gecontroleerd tegen het
  IEEE-register in plaats van overgenomen uit een andere detector.
+
+ (De README zegt 76 regels en 32 High. Die is één regel achter -- er is een
+ ALPR-prefix toegevoegd zonder de drie getallen bij te werken die de tabel
+ beschrijven. Hier geteld uit src/signatures.cpp, de enige kopie die op een
+ manier fout kan zijn die uitmaakt.)
 
 
 ===============================================================================
