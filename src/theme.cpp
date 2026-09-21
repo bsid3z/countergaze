@@ -8,6 +8,7 @@
 #include "squachy.h"
 #include "settings.h"
 #include "security.h"
+#include "battery.h"
 
 namespace Theme {
 
@@ -284,6 +285,48 @@ static int lockIconX(int w) {
     return rotateShown() ? (w - ROTATE_ICON_W - LOCK_ICON_W) : (w - LOCK_ICON_W);
 }
 
+// ---- battery, to the LEFT of the padlock and the rotate icon ------------
+// Only drawn where a board can actually measure one (see battery.h); on
+// every board that ships this never draws and the bar is unchanged.
+//
+// Leftmost of the three on purpose. The other two are controls -- they get
+// tapped, and they should stay where a thumb already expects them, at the
+// very corner. This is a readout and nothing happens when you press it, so
+// it takes the inside position and pushes nothing around.
+static const int BATT_BOX_W = 30;
+
+static int battIconX(int w) {
+    int right = w;
+    if (rotateShown())        right -= ROTATE_ICON_W;
+    if (Security::enabled())  right -= LOCK_ICON_W;
+    return right - BATT_BOX_W;
+}
+
+static void drawBatteryLevel(TFT_eSPI& t, int w, int barH) {
+    const uint8_t pct = Battery::percent();
+    const int x0 = battIconX(w);
+    t.fillRect(x0, 0, BATT_BOX_W, barH, BG);
+
+    // Green while it is nobody's problem, amber when it is becoming one,
+    // red when it is. Cyan while charging, because a number that is going
+    // UP should not be wearing the colour that means hurry.
+    uint16_t col = GREEN;
+    if (Battery::charging()) col = CYAN;
+    else if (pct <= 15)      col = RED;
+    else if (pct <= 35)      col = AMBER;
+
+    char buf[6];
+    snprintf(buf, sizeof buf, "%u%%", (unsigned)pct);
+
+    t.setTextFont(1);
+    t.setTextSize(1);
+    t.setTextColor(col, BG);
+    const int tw = t.textWidth(buf);
+    const int th = t.fontHeight();
+    t.setCursor(x0 + (BATT_BOX_W - tw) / 2, (barH - th) / 2);
+    t.print(buf);
+}
+
 static void drawLockIcon(TFT_eSPI& t, int w, int barH) {
     const int x0 = lockIconX(w);
     t.fillRect(x0, 0, LOCK_ICON_W, barH, BG);
@@ -417,6 +460,9 @@ void drawTitleBar(TFT_eSPI& t, const char* title) {
     // was there last frame and is not now leaves nothing behind -- no erase
     // needed, unlike the rotate icon above, which predates that repaint.
     if (Security::enabled()) drawLockIcon(t, w, ICON_BOX_H);
+    // Last, so its box is computed against the two above it already being
+    // placed, and so it sits inside them rather than under a corner control.
+    if (Battery::present()) drawBatteryLevel(t, w, ICON_BOX_H);
 }
 
 void drawButton(TFT_eSPI& t, int x, int y, int w, int h,
