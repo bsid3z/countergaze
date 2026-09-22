@@ -395,7 +395,7 @@
                    met een accu-ingang. Een percentage in de title bar,
                    links van het slotje en het rotate-icoon: groen, amber
                    onder 35%, rood onder 15%, cyaan tijdens opladen.
-                   Uitgelezen van GPIO5 via de 2:1 divider van het board.
+                   Uitgelezen van GPIO5 via de 33k/100k divider van het board.
                    Elk ander board heeft geen accu-ingang en tekent niets.
 
 

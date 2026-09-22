@@ -377,7 +377,7 @@
                    a battery input. A percentage in the title bar, left of
                    the padlock and rotate icons: green, amber under 35%, red
                    under 15%, cyan while charging. Read off GPIO5 through the
-                   board's 2:1 divider. Every other board has no battery
+                   board's 33k/100k divider. Every other board has no battery
                    input and draws nothing.
 
 

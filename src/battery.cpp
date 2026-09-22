@@ -17,7 +17,14 @@
 //
 //   pinMode(PIN, INPUT)   once, at setup
 //   analogRead(PIN)       plain, averaged over 16 samples
-//   volts = (raw / 4095.0) * 3.3 * 2.0
+//   volts = (raw / 4095.0) * 3.3 * 1.33
+//
+// The 1.33 is the one place this departs from that firmware, which used
+// 2.0. The manufacturer's circuit diagram (reproduced in the de-dh
+// ESP32-JC3248W535 repo, doc/LiPoIOConnection.png) shows BAT -> R26 33k ->
+// IO5 -> R27 100k -> GND, with R25 0R in series to the pin. The pin sees
+// 100/133 of the cell, so the cell is the pin times 1.33. At 2.0 every
+// reading was 1.5x too high.
 //
 // No analogSetPinAttenuation. No analogReadMilliVolts. Those are better
 // calls in general -- the ADC is non-linear and analogReadMilliVolts
@@ -38,7 +45,7 @@ namespace Battery {
 namespace {
 
 const int      PIN        = 5;
-const float    DIVIDER    = 2.0f;
+const float    DIVIDER    = 1.33f;   // (33k + 100k) / 100k -- see the note above
 const float    ADC_REF    = 3.3f;    // 11 dB attenuation, measured rather than nominal
 const int      SAMPLES    = 16;
 

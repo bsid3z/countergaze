@@ -2,13 +2,14 @@
 //
 // Only the Guition JC3248W535EN can. It carries an IP5306 power-management
 // IC and a JST 1.25mm cell connector (P5), with the battery rail divided
-// 2:1 into GPIO5 so the ADC can read it. No other board here has a battery
+// 33k/100k (cell x 0.75) into GPIO5 so the ADC can read it. No other board here has a battery
 // input at all, so on every one of them this reports "no battery" and draws
 // nothing -- the title bar is unchanged on the boards that ship.
 //
-// THE DIVIDER PIN IS NOT FROM A DATASHEET. GPIO5 and the 2:1 ratio come
-// from a working third-party firmware for this exact board, and Guition
-// publish no schematic. present() is written to be believed rather than
+// THE DIVIDER IS FROM A CIRCUIT DIAGRAM, NOT A MEASUREMENT. GPIO5 comes from
+// a working third-party firmware for this exact board; the 33k/100k ratio
+// comes from the manufacturer's circuit diagram (see battery.cpp), which
+// is the only schematic-like thing Guition have let out. present() is written to be believed rather than
 // assumed: a reading has to sit inside a range a real lithium cell could
 // actually produce, for several samples running, before this says there is
 // a battery. A floating pin wanders and a missing one reads near zero, and
@@ -29,7 +30,7 @@ namespace Battery {
     // after boot while the filter fills.
     bool present();
 
-    // Battery volts at the cell, already corrected for the 2:1 divider.
+    // Battery volts at the cell, already corrected for the 33k/100k divider.
     // 0 when !present().
     float volts();
 
