@@ -3709,11 +3709,17 @@ void drawTerminalLog(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     if (flashOn) {
         if (now - flashStart < 900) {
             uint16_t col = ((now / 120) % 2) ? GREEN : blend(BG, GREEN, 150);
-            t.fillRect(0, yStart + bandH / 2 - 6, w, 12, BG);
+            // Size 2 so it reads as the beat it is, unless the line is wider
+            // than the screen at that size ("CONNECTION ESTABLISHED" is 264px).
+            t.setTextSize(2);
+            if (t.textWidth(FLASH_LINES[flashLine]) > w - 8) t.setTextSize(1);
+            const int fh = t.fontHeight();
+            t.fillRect(0, yStart + bandH / 2 - fh / 2 - 2, w, fh + 4, BG);
             t.setTextColor(col, BG);
             int mw = t.textWidth(FLASH_LINES[flashLine]);
-            t.setCursor((w - mw) / 2, yStart + bandH / 2 - 4);
+            t.setCursor((w - mw) / 2, yStart + bandH / 2 - fh / 2);
             t.print(FLASH_LINES[flashLine]);
+            t.setTextSize(1);
         } else {
             flashOn = false;
             flashNextAt = now + (uint32_t)random(9000, 20000);

@@ -2546,15 +2546,30 @@ static void drawCounterLine(TFT_eSPI& t, int w, int y, const DetectionEngine& en
     }
     // The trailing gap is spacing between entries, not part of the last one.
     while (off > 0 && buf[off - 1] == ' ') buf[--off] = '\0';
+    // Font 2, the caller's, unless this row is too wide for it -- four
+    // three-digit counts in portrait can be. Then the GLCD face, as before.
     int tw = t.textWidth(buf);
+    if (tw > w - 8) { t.setTextFont(1); tw = t.textWidth(buf); }
     const int x = (w - tw) / 2;
     // A dark plate a few pixels past the text, not just the character cells:
     // tight to the glyphs, the numbers read as cut out of whatever the
     // background is doing behind them.
     const int PAD_X = 4, PAD_Y = 2;
     t.fillRect(x - PAD_X, y - PAD_Y, tw + 2 * PAD_X, t.fontHeight() + 2 * PAD_Y, Theme::BG);
+    // Printed a token at a time so the two halves can differ: the label
+    // white, the count in the cyan the whole line used to be. The cursor
+    // carries on from each print, so the spacing is the measured buf's.
     t.setCursor(x, y);
-    t.print(buf);
+    for (uint8_t i = 0; i < n; i++) {
+        char num[12];
+        snprintf(num, sizeof(num), ":%u", counterCount(eng, types[i]));
+        t.setTextColor(Theme::WHITE, Theme::BG);
+        t.print(counterLabel(types[i]));
+        t.setTextColor(Theme::CYAN, Theme::BG);
+        t.print(num);
+        if (i + 1 < n) t.print("  ");
+    }
+    t.setTextFont(2);
 }
 
 #if SQUACH_MESH
@@ -2708,7 +2723,9 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     const uint8_t counterRows = landscape ? COUNTER_ROWS_LANDSCAPE : COUNTER_ROWS_PORTRAIT;
 
     Theme::ButtonBarGeom bar = Theme::computeButtonBar(w, h);
-    const int lineH          = 14;
+    // 20: font 2's 16 rows and four between. It was 14 for the GLCD face,
+    // which was too small to read; see drawCounterLine().
+    const int lineH          = 20;
     const int countersTop    = bar.y - counterRows * lineH - 6;
     // The counter rows alone sit 9px lower than countersTop, and nothing
     // else does. Measured off a rendered landscape frame before any of
@@ -2740,7 +2757,10 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     // Orientation-independent by construction. The last row's ink lands at
     // bar.y - 14 + this whatever counterRows is, so portrait's four rows
     // clear the buttons by the same 4px landscape's two do.
-    const int counterTextTop = countersTop + 9;
+    //
+    // Font 2 since then, at 20-row lines: the last row's plate (16 + 2 + 2)
+    // ends at bar.y - 26 + this + 18, so 1 leaves it 7px off the buttons.
+    const int counterTextTop = countersTop + 1;
 
     // The headline hangs off the counter block now, not off countersTop.
     //
@@ -2765,7 +2785,7 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     // way. 33 is what puts that last painted row exactly HEADLINE_PAD above
     // the counter text.
     static const int HEADLINE_H   = 33;
-    static const int HEADLINE_PAD = 5;
+    static const int HEADLINE_PAD = 9;
     const int headlineTop = counterTextTop - HEADLINE_PAD - HEADLINE_H;
 
     // ...which frees the rows it used to sit in, and Squachy takes them.
@@ -3093,7 +3113,8 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     // screen), the same "let the background do the erasing"
     // pattern already relied on for Squachy and the status line above.
     t.setTextSize(1);
-    t.setTextColor(Theme::CYAN, Theme::BG);
+    t.setTextFont(2);
+    t.setTextColor(Theme::WHITE, Theme::BG);
     t.setTextWrap(false);
 
     // Evenly balanced, not greedily packed (e.g. 4/4/4/1 in portrait)
@@ -3110,6 +3131,7 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
         drawCounterLine(t, w, counterTextTop + row * lineH, eng, counterTypes + start, n);
         start += n;
     }
+    t.setTextFont(1);
 
     // Soft buttons, straight over the background: it repaints the whole
     // strip under them every frame, margins and gaps included. Each
