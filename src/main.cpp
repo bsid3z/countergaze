@@ -3621,6 +3621,13 @@ void loop() {
             }
             if (tp.valid && (now - lastTouch) > TOUCH_DEBOUNCE_MS) {
                 lastTouch = now;
+                // One press, one action. IGNORE, SNOOZE and HUNT all leave for
+                // CLEAR, and the finger that pressed them is often still down
+                // on CLEAR's first frame. IGNORE sits in the top-right corner,
+                // which on CLEAR is the rotate icon's target, so that leftover
+                // touch was turning the screen. Nothing here needs a held
+                // press, so the rest of this one is swallowed, as a wake tap is.
+                s_swallowTouch = true;
                 if (uiAlertHitMoreInfo(tp.x, tp.y, tft.width(), tft.height())) {
                     s_confirmType        = lastAlertType;
                     memcpy(s_confirmVendor, s_alertVendor, sizeof s_confirmVendor);
