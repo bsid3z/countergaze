@@ -411,12 +411,17 @@ struct Assembly {
 // Kept across a reboot: meshtalk.cpp writes the table to flash after every
 // message it records. It used to be RAM only, so a frame recorded by somebody
 // else and replayed at a freshly booted receiver was shown once more. What is
-// still true: the table holds four senders, and one pushed out by four newer
-// ones is forgotten, so its old frames count as new again.
+// still true: a sender pushed out by N newer ones is forgotten, so its old
+// frames count as new again. N used to be 4 against a roster of 16, so any
+// squad of five or more pushed members out in ordinary use and reopened their
+// old frames to a replay. It is now the whole roster plus headroom.
 struct Replay {
-    static constexpr uint8_t N = 4;
+    static constexpr uint8_t N = 20;
     // A count, then each live sender, oldest first: address, last counter.
     static constexpr size_t  BYTES = 1 + N * 10;
+    // What the four-sender table wrote, still read so an update keeps it.
+    static constexpr uint8_t LEGACY_N = 4;
+    static constexpr size_t  LEGACY_BYTES = 1 + LEGACY_N * 10;
     struct E { uint8_t mac[6]; uint32_t last; uint32_t used; bool live; };
     E        e[N] = {};
     uint32_t stamp = 0;

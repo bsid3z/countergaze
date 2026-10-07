@@ -428,9 +428,14 @@ Fail finish() {
         }
         Serial.printf("[ota] the image says it is %s\n", s_imgVer);
     } else {
-        // A release from before the marker existed. Its signature still has
-        // to check out; there is simply no version in it to compare.
-        Serial.println("[ota] the image carries no version marker");
+        // A release from before the marker existed -- and so, necessarily,
+        // older than this build, which has one. Accepting it let anybody on
+        // the same network answer the plain-HTTP download with any genuine
+        // pre-marker release, signature and all, and walk the board back to
+        // bugs fixed since: the exact downgrade the check above exists to stop.
+        Serial.println("[ota] refused: the image carries no version marker, so it predates this build");
+        abort();
+        return Fail::TOO_OLD;
     }
 
     // esp_ota_end() checks the image itself: its segments and its own hash.
@@ -512,7 +517,8 @@ const char* testVersionDecision(const char* version) {
     s_verFound  = false;
     s_imgVer[0] = 0;
     scanVersion((const uint8_t*)fake, (size_t)n);
-    const bool older = s_verFound && verNewer(runningVersion(), s_imgVer);
+    // The same rule finish() applies: no marker at all is refused too.
+    const bool older = !s_verFound || verNewer(runningVersion(), s_imgVer);
     static char out[96];
     snprintf(out, sizeof out, "read \"%s\" from the image, running %s: %s",
              s_verFound ? s_imgVer : "(none)", runningVersion(),

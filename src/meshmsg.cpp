@@ -334,7 +334,11 @@ size_t Replay::save(uint8_t out[BYTES]) const {
 
 bool Replay::load(const uint8_t* in, size_t len) {
     *this = Replay();
-    if (!in || len != BYTES || in[0] > N) return false;
+    // The current size, or the four-sender table from before it grew: same
+    // layout, fewer rows, so it loads as it stands rather than being thrown
+    // away -- an empty table would make every old frame fresh again.
+    const uint8_t cap = len == BYTES ? N : len == LEGACY_BYTES ? LEGACY_N : 0;
+    if (!in || !cap || in[0] > cap) return false;
     for (uint8_t k = 0; k < in[0]; k++) {
         const uint8_t* p = in + 1 + k * 10;
         E& s = e[k];

@@ -469,13 +469,15 @@ int main() {
         ck("after it, none is", !t.fresh(me, 10) && !t.fresh(me, 11) && !t.fresh(me, 12));
         ck("and the next message is", t.fresh(me, 13));
 
-        // Five senders into four slots: the one heard from longest ago goes.
-        uint8_t m[5][6];
-        for (int i = 0; i < 5; i++) { memcpy(m[i], me, 6); m[i][5] = (uint8_t)(0x10 + i); }
+        // One sender more than there are slots: the one heard from longest ago goes.
+        const int K = Replay::N + 1;
+        uint8_t m[Replay::N + 1][6];
+        for (int i = 0; i < K; i++) { memcpy(m[i], me, 6); m[i][5] = (uint8_t)(0x10 + i); }
         Replay q;
-        for (int i = 0; i < 5; i++) q.record(m[i], 100);
-        ck("the four most recent are remembered", !q.fresh(m[4], 100) && !q.fresh(m[1], 100));
+        for (int i = 0; i < K; i++) q.record(m[i], 100);
+        ck("the N most recent are remembered", !q.fresh(m[K - 1], 100) && !q.fresh(m[1], 100));
         ck("the oldest was dropped, so it is fresh again", q.fresh(m[0], 100));
+        ck("the table holds a whole roster", Replay::N >= 16);
     }
 
     suite("The counter never repeats, even across a crash");
@@ -554,17 +556,32 @@ int main() {
         ck("and the next message from each is fresh", after.fresh(me, 41) && after.fresh(you, 8));
 
         // Which sender goes next must survive the reboot too.
-        uint8_t m[5][6];
-        for (int i = 0; i < 5; i++) { memcpy(m[i], me, 6); m[i][5] = (uint8_t)(0x20 + i); }
+        const int N = Replay::N;
+        uint8_t m[Replay::N + 1][6];
+        for (int i = 0; i <= N; i++) { memcpy(m[i], me, 6); m[i][5] = (uint8_t)(0x20 + i); }
         Replay q;
-        for (int i = 0; i < 4; i++) q.record(m[i], 100 + i);
+        for (int i = 0; i < N; i++) q.record(m[i], 100 + i);
         q.record(m[0], 200);                    // heard again: m[1] is now the oldest
         q.save(b);
         Replay q2;
         q2.load(b, sizeof b);
-        q2.record(m[4], 300);                   // a fifth sender takes a slot
+        q2.record(m[N], 300);                   // one more sender takes a slot
+        bool restKept = true;
+        for (int i = 2; i < N; i++) restKept = restKept && !q2.fresh(m[i], 100 + i);
         ck("after loading, the one heard from longest ago is the one dropped",
-           q2.fresh(m[1], 101) && !q2.fresh(m[0], 200) && !q2.fresh(m[2], 102) && !q2.fresh(m[3], 103));
+           q2.fresh(m[1], 101) && !q2.fresh(m[0], 200) && restKept);
+
+        // The four-sender table an older build wrote still loads, floors and all.
+        uint8_t old[Replay::LEGACY_BYTES] = {};
+        old[0] = 2;
+        memcpy(old + 1, me, 6);  old[7]  = 40;
+        memcpy(old + 11, you, 6); old[17] = 7;
+        Replay fromOld;
+        ck("a legacy four-sender record loads",
+           fromOld.load(old, sizeof old) && !fromOld.fresh(me, 40) && !fromOld.fresh(you, 7) &&
+           fromOld.fresh(me, 41));
+        old[0] = Replay::LEGACY_N + 1;
+        ck("but not one claiming more senders than it had room for", !fromOld.load(old, sizeof old));
 
         Replay bad;
         ck("a record of the wrong size loads as empty", !bad.load(b, sizeof b - 1) && bad.fresh(m[0], 0));

@@ -238,8 +238,18 @@ void deliverInvite(const Slot& s, uint32_t now, uint32_t ctr, uint8_t kind) {
         const bool ok = MeshMsg::invitePubUnblob(s_invAsm.bytes, target, role, pub);
         s_invAsm.clear();
         if (!ok || memcmp(target, s_ownMac, 6) != 0) return;     // somebody else's invite
-        s_replay.record(s.mac, ctr);
-        saveReplay();
+        // NOT recorded in the replay table. These frames carry only a hash,
+        // no key, so anybody can forge one "from" any address with any
+        // counter -- and recording it let a forger push a squad member's
+        // counter to the top (silencing them, in flash) or flush real
+        // senders out of the table to replay their old frames. A repeat of
+        // the same offer -- same board, same key, reassembled from whichever
+        // of its parts came last -- is caught here instead, by its content.
+        static uint8_t lastMac[6] = { 0 };
+        static uint8_t lastPub[MeshMsg::INVITE_PUB_LEN] = { 0 };
+        if (memcmp(lastMac, s.mac, 6) == 0 && memcmp(lastPub, pub, sizeof lastPub) == 0) return;
+        memcpy(lastMac, s.mac, 6);
+        memcpy(lastPub, pub, sizeof lastPub);
         if (role == 0) {
             // An offer. Only while nothing else is going on: a second offer
             // mid-invite is ignored, not swapped in.

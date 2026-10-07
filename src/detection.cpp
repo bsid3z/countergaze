@@ -87,6 +87,21 @@ void setScanWindow(uint8_t w) { if (w >= 1 && w <= 100) { s_windowReq = w; s_win
 static volatile uint8_t s_scanPin = 0;   // 0 auto, 1 active, 2 passive -- the bench's say
 void setScanPin(uint8_t pin) { s_scanPin = pin > 2 ? 0 : pin; }
 
+// A name off the air, made safe to draw: printable ASCII only, anything else
+// a '?'. Names and SSIDs are whatever the transmitter says they are, and the
+// screen's print() acts on control characters -- a newline in a name moved
+// the cursor and drew the rest of it over the rows below. signatures.cpp's
+// pwnagotchi parser already refused such names; these two paths did not.
+static void copyAirName(char* out, size_t outSz, const char* in, size_t inLen) {
+    if (!outSz) return;
+    size_t i = 0;
+    for (; i + 1 < outSz && i < inLen && in[i]; i++) {
+        const char c = in[i];
+        out[i] = (c >= 0x20 && c <= 0x7E) ? c : '?';
+    }
+    out[i] = '\0';
+}
+
 class BleScanCallbacks : public NimBLEScanCallbacks {
     // First sight of every advert, before any reply. The counts live here
     // and not in onResult: in an active scan a device that never answers
@@ -185,7 +200,7 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
             // c_str() taken straight off it points into a temporary that is
             // gone by the next line.
             const std::string name = adv->getName();
-            if (!name.empty()) strncpy(r.name, name.c_str(), sizeof(r.name) - 1);
+            if (!name.empty()) copyAirName(r.name, sizeof(r.name), name.data(), name.size());
             g_engine->postRawBle(r);
             return;
         }
@@ -198,9 +213,7 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
         det.hits   = 1;
         det.active = true;
         const std::string name = adv->getName();   // by value -- see the raw path above
-        if (!name.empty()) {
-            strncpy(det.name, name.c_str(), sizeof(det.name) - 1);
-        }
+        if (!name.empty()) copyAirName(det.name, sizeof(det.name), name.data(), name.size());
         // The matched row's own label, for the types that cover several
         // devices -- see where the vendor is written, below.
         const char* label = nullptr;
@@ -491,10 +504,8 @@ bool DetectionEngine::init() {
                 if (ie[0] == 0x00) {
                     uint8_t ssidLen = ie[1];
                     if (ssidLen > 32) ssidLen = 32;
-                    if (36 + 2 + ssidLen <= sigLen) {
-                        memcpy(ssid, ie + 2, ssidLen);
-                        ssid[ssidLen] = 0;
-                    }
+                    if (36 + 2 + ssidLen <= sigLen)
+                        copyAirName(ssid, sizeof ssid, (const char*)ie + 2, ssidLen);
                 }
             }
             // Capability info is the last 2 bytes of the 12-byte fixed
