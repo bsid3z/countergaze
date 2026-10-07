@@ -181,8 +181,11 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
             memset(&r, 0, sizeof(r));
             memcpy(r.mac, mac, 6);
             r.rssi = adv->getRSSI();
-            const char* name = adv->getName().c_str();
-            if (name && name[0]) strncpy(r.name, name, sizeof(r.name) - 1);
+            // Held in a named string: getName() returns by value, so a
+            // c_str() taken straight off it points into a temporary that is
+            // gone by the next line.
+            const std::string name = adv->getName();
+            if (!name.empty()) strncpy(r.name, name.c_str(), sizeof(r.name) - 1);
             g_engine->postRawBle(r);
             return;
         }
@@ -194,9 +197,9 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
         det.firstSeen = det.lastSeen = millis();
         det.hits   = 1;
         det.active = true;
-        const char* name = adv->getName().c_str();
-        if (name && name[0]) {
-            strncpy(det.name, name, sizeof(det.name) - 1);
+        const std::string name = adv->getName();   // by value -- see the raw path above
+        if (!name.empty()) {
+            strncpy(det.name, name.c_str(), sizeof(det.name) - 1);
         }
         // The matched row's own label, for the types that cover several
         // devices -- see where the vendor is written, below.
@@ -979,6 +982,8 @@ static void scanFlushTick() {
     ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &s_flushEv);
 }
 
+static void rawActiveTick();   // with startRawBleScan(), below
+
 void DetectionEngine::loop() {
     if (g_rawMode != RawScanMode::NONE) {
         // A raw scan owns the radio right now -- channel hopping here
@@ -986,6 +991,7 @@ void DetectionEngine::loop() {
         // sweep, and the WiFi promiscuous queue is empty anyway (it's
         // disabled for the duration of either raw mode, see
         // startRawBleScan/startRawWifiScan).
+        rawActiveTick();
         _sd.tick();
         return;
     }
@@ -1240,6 +1246,55 @@ void DetectionEngine::postRawBle(RawBleResult r) {
     // how many devices happen to be nearby.
 }
 
+// A raw BLE sweep ASKS, for its first RAW_BLE_SCAN_MS. Most phones, earbuds
+// and watches put their name only in the scan response, which a passive scan
+// never requests -- and the continuous scan is passive whenever the room tops
+// SCAN_ACTIVE_BELOW adverts a second, which an ordinary house does. So in a
+// passive room every row of the raw list read "(unnamed)". The sweep is short,
+// the user asked for it, and it backs off on the same heap bar the continuous
+// scan uses; afterwards the scan goes back to whatever scanModeTick() wants.
+static bool                 s_rawActive     = false;   // loop task: this sweep forced active
+static volatile bool        s_rawWantActive = false;   // read on the host task
+static struct ble_npl_event s_rawEv;
+static bool                 s_rawEvReady    = false;
+
+// Runs on the NimBLE host task, like scanFlushOnHost().
+static void rawModeOnHost(struct ble_npl_event*) {
+    NimBLEScan* scan = NimBLEDevice::getScan();
+    if (!scan || !scan->isScanning()) return;
+    const bool passive = s_rawWantActive ? false : s_wantPassive;
+    if (passive == s_passiveNow) return;
+    scan->stop();
+    scan->setActiveScan(!passive);
+    s_passiveNow = passive;
+    scan->start(0, false, true);
+}
+
+static void postRawMode(bool active) {
+    s_rawWantActive = active;
+    if (!s_rawEvReady) {
+        ble_npl_event_init(&s_rawEv, rawModeOnHost, nullptr);
+        s_rawEvReady = true;
+    }
+    ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &s_rawEv);
+}
+
+static void rawActiveEnd() {
+    if (!s_rawActive) return;
+    s_rawActive = false;
+    postRawMode(false);
+}
+
+// From loop() while a raw scan owns the radio, which skips scanFlushTick() and
+// with it the heap checks -- so the sweep keeps its own.
+static void rawActiveTick() {
+    if (!s_rawActive) return;
+    const uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    s_heapLow = largest < 1536;
+    if (g_rawMode != RawScanMode::BLE || millis() - g_rawBleStartMs >= RAW_BLE_SCAN_MS ||
+        largest < SCAN_FLUSH_BLOCK_B) rawActiveEnd();
+}
+
 void DetectionEngine::startRawBleScan() {
     if (g_rawMode == RawScanMode::WIFI) WiFi.scanDelete();
     _rawBleCount = 0;
@@ -1252,6 +1307,12 @@ void DetectionEngine::startRawBleScan() {
     esp_wifi_set_promiscuous(false);
     g_rawMode = RawScanMode::BLE;
     g_rawBleStartMs = millis();
+    const bool pressedWindow = s_passiveUntil && (int32_t)(s_passiveUntil - g_rawBleStartMs) > 0;
+    if (s_scanPin != 2 && !pressedWindow &&
+        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) >= SCAN_ACTIVE_BLOCK_B) {
+        s_rawActive = true;
+        postRawMode(true);
+    }
 }
 
 bool DetectionEngine::rawBleScanDone() const {
@@ -1316,6 +1377,7 @@ const uint8_t* DetectionEngine::rawWifiBssid(uint8_t idx) const {
 void DetectionEngine::stopRawScan() {
     if (g_rawMode == RawScanMode::WIFI) WiFi.scanDelete();
     g_rawMode = RawScanMode::NONE;
+    rawActiveEnd();
     esp_wifi_set_promiscuous(true);
 }
 
