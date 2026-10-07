@@ -386,7 +386,7 @@ void uiDeskTapTimer(uint32_t now) {
     if (s_timer == Timer::IDLE) {
         s_timer = Timer::FOCUS;
         s_timerEnd = now + FOCUS_MS;
-        sayFocus("Twenty-five minutes. I'll keep the time. You keep the focus.", now);
+        sayFocus("Twenty-five minutes. Focus.", now);
     } else {
         // A running block is stopped by a tap, no confirmation: the cost of
         // a stray tap is one more tap.
@@ -419,10 +419,10 @@ void uiDeskTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         if (s_timer == Timer::FOCUS) {
             s_timer = Timer::BREAK;
             s_timerEnd = now + BREAK_MS;
-            sayFocus("Time. Stand up, look at something far away. Five minutes.", now);
+            sayFocus("Time. Stand up, look far away.", now);
         } else {
             s_timer = Timer::IDLE;
-            Squachy::announce("Break's over. Back to it, or don't, I'm a screen.");
+            Squachy::announce("Break's over. Back to it. Or don't.");
         }
     }
 

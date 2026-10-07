@@ -143,13 +143,13 @@ static const char* IDLE_LINES[] = {
     "Don't be a skid. Learn the craft.",
     "This WiFi is giving me ideas.",
     "I'm everywhere and nowhere.",
-    "They built cameras. I built better hiding spots.",
+    "They built cameras. I hid better.",
     "Big feet, bigger opsec.",
     "Too quiet. I love it.",
     "Snacks fuel good opsec. Pack extra.",
     "This screen's my new hideout.",
     "Bigfoot sightings up 40% lately.",
-    "Locks keep out the polite. I'm not polite.",
+    "Locks stop the polite. I'm not.",
     "The best hack teaches someone.",
     "I contain multitudes and RF signals.",
     "Every good cryptid needs a hobby.",
@@ -191,7 +191,7 @@ static const char* RELAXED_MOOD_LINES[] = {
     "Quiet enough to nap standing up.",
     "Nothing but vibes today.",
     "Slow day. I'll take it.",
-    "Peaceful out here. Suspiciously peaceful.",
+    "Peaceful. Suspiciously peaceful.",
 };
 
 // A little wander — see the Mood::WALK handling in tick()/drawBody().
@@ -221,15 +221,15 @@ static const char* SEEN_BEFORE_LINES[] = {
 };
 
 static const char* PERSISTENT_LINES[] = {
-    "This one keeps coming back. Worth noting.",
-    "Not a one-time thing anymore. Keep an eye on it.",
-    "Same one, again. That's a pattern, not a coincidence.",
+    "This one keeps coming back.",
+    "Not a one-off anymore. Watch it.",
+    "Same one again. That's a pattern.",
     "This one's really sticking around.",
 };
 
 static const char* BOOT_LINES[] = {
-    "SquachWatch online. Let's find something.",
-    "Booted. Don't just stare at your phone.",
+    "SquachWatch online. Let's hunt.",
+    "Booted. Stop staring at your phone.",
 };
 
 // First-boot walkthrough — see startOnboardingInternal(). Kept to
@@ -260,7 +260,7 @@ static const char* LOG_OPEN_LINES[] = {
 };
 
 static const char* LOG_CLEAR_LINES[] = {
-    "Log wiped. Fresh start, cryptid style.",
+    "Log wiped. Fresh start.",
 };
 // Counted rather than hard-coded at the call site. pick() indexes with
 // random(0, n), so a literal that outlives an edit to the list above walks
@@ -279,23 +279,23 @@ static const char* PET_LINES[] = {
     "Ooh, right there.",
     "Personal space? Never heard of it.",
     "Petting a cryptid. Bold move.",
-    "This is why they never get good photos of me.",
-    "Okay, ONE more. Don't tell the others.",
+    "This is why my photos are blurry.",
+    "Okay, ONE more. Don't tell.",
     "You'd pet Bigfoot too. Don't lie.",
     "Cryptid, not a house pet. But okay.",
-    "Ten out of ten, would be spotted again.",
-    "Careful, that's how legends get spoiled.",
-    "This never happens at the cabin. Never.",
-    "Better resolution than any trail cam gets.",
+    "Ten out of ten. Would be spotted.",
+    "Careful, legends get spoiled.",
+    "This never happens at the cabin.",
+    "Better than any trail cam.",
     "Feed me enough pets and I unionize.",
     "That's going straight in my memoir.",
-    "Rarer than an actual sighting, honestly.",
-    "I don't do this for everyone. Okay, maybe.",
+    "Rarer than a real sighting.",
+    "Not for everyone. Okay, maybe.",
     "I bruise like a legend, not a mascot.",
-    "This is the part they cut from the footage.",
-    "You'll tell people. Nobody will believe you.",
+    "They cut this from the footage.",
+    "Tell people. Nobody'll believe you.",
     "Petting confirmed. No takebacks.",
-    "Witnesses say less than you're about to.",
+    "Witnesses say less than you will.",
 };
 
 // A stationary press-and-hold reads as more deliberate than a quick
@@ -314,9 +314,9 @@ static const char* HELD_LINES[] = {
 // PET_LINES or HELD_LINES do.
 static const char* PETTING_LINES[] = {
     "Okay yeah. This is the good stuff.",
-    "I'm not saying I purr. I'm not saying I don't.",
+    "I don't purr. Or do I.",
     "This is exactly what I needed today.",
-    "Cryptid melting. Send help. Don't actually.",
+    "Cryptid melting. Send help.",
     "You've unlocked my trust. Briefly.",
     "This is going in the highlight reel.",
 };
@@ -334,13 +334,13 @@ static const char* PETTING_LINES[] = {
 static const char* WATCHING_LINES[] = {
     "Still watching. Nothing's snuck past.",
     "Eyes open. You're covered.",
-    "Sweeping the airwaves. All quiet so far.",
+    "Sweeping the airwaves. All quiet.",
     "I'm on it. Go about your business.",
-    "Listening. Nothing worth telling you about.",
-    "Two point four gigahertz of nothing. Good.",
+    "Listening. Nothing worth telling.",
+    "2.4 gigahertz of nothing. Good.",
     "Nobody's looking at you but me.",
     "Watching the watchers. Nothing yet.",
-    "Radio's quiet. I'll shout if it isn't.",
+    "Radio's quiet. I'll shout if not.",
     "Keeping an eye out. Same as always.",
 };
 static const uint8_t WATCHING_N = sizeof(WATCHING_LINES) / sizeof(WATCHING_LINES[0]);
@@ -349,7 +349,7 @@ static const char* SLEEPY_LINES[] = {
     "*yawn* ...still here.",
     "Cryptid power-nap. Don't tell anyone.",
     "Resting my eyes. Not my watch.",
-    "Zzz... wake me if something's actually out there.",
+    "Zzz... wake me if something's up.",
 };
 
 // A few over-the-top lines for the rare full "party mode" flourish
@@ -366,22 +366,22 @@ static const char* PARTY_LINES[] = {
 // end of the world, ornate mock-oaths, tangents that go nowhere on purpose,
 // and a gleeful streak underneath it. Written new; the rhythm is the debt.
 static const char* const NOIR_LINES[] = {
-    "Great galloping router tables. Nothing happened again.",
-    "I've seen things you wouldn't believe. Most of them were printers.",
-    "Sweet sizzling substations, the air's quiet. I don't trust it.",
-    "It was a quiet night. Too quiet. Then it stayed quiet. I made a sandwich.",
-    "Somewhere out there a Flock cam is thinking about you. I'm thinking about lunch.",
-    "Holy jumping junction boxes, that's a lot of Bluetooth for a Tuesday.",
-    "I don't have a badge. I have feet. Big ones. It's basically the same.",
-    "Note to self: the smart fridge is not a suspect. Yet.",
-    "Crime never sleeps. Neither do I. Neither does the doorbell. We're all very tired.",
-    "Suffering succotash of the airwaves, a printer just asked to be my friend.",
-    "Nothing to report but my own magnificence. I've filed it under M.",
-    "If I had a nickel for every tracker I've seen, I'd need somewhere to keep nickels.",
-    "Great screaming skimmers of the seven-elevens. Still nothing. Carry on.",
-    "This is the part of the case where I stare meaningfully at a router.",
-    "I could go for some crime right now. Small crime. Jaywalking. I'd watch.",
-    "By the sacred sideburns of the switchboard, I'm bored.",
+    "Galloping routers. Nothing again.",
+    "I've seen things. Mostly printers.",
+    "Sizzling substations. Too quiet.",
+    "Too quiet. I made a sandwich.",
+    "Flock cams think of you. I: lunch.",
+    "Holy junction boxes. Bluetooth!",
+    "No badge. Big feet. Same thing.",
+    "The fridge is not a suspect. Yet.",
+    "Crime never sleeps. Nor do I.",
+    "A printer wants to be friends.",
+    "Nothing to report but me.",
+    "A nickel per tracker? I'd be rich.",
+    "Screaming skimmers. Still nothing.",
+    "Now I stare meaningfully at a router.",
+    "I could go for a small crime.",
+    "By the switchboard, I'm bored.",
 };
 static const uint8_t NOIR_LINES_N = sizeof(NOIR_LINES) / sizeof(NOIR_LINES[0]);
 
@@ -389,13 +389,13 @@ static const uint8_t NOIR_LINES_N = sizeof(NOIR_LINES) / sizeof(NOIR_LINES[0]);
 // tacked on so the line still tells you what it was.
 static const char* const OATH_LINES[] = {
     "Holy hopping hotspots. %s.",
-    "Great galloping glass fibre! %s. Act natural.",
-    "Sweet screaming sensor arrays. A %s. Of course.",
+    "Glass fibre! %s. Act natural.",
+    "Sensor arrays! A %s. Of course.",
     "By the beard of the modem, a %s.",
-    "Well slap me with a spectrum analyser. %s.",
-    "Suffering skimmers, a %s. Nobody move. Or move. I'm not the boss of you.",
-    "Jumping jitterbugs of the junction box, %s.",
-    "Great heaving heatmaps. %s. I love this job.",
+    "Slap me with an analyser. %s.",
+    "Suffering skimmers! A %s. Freeze.",
+    "Jumping jitterbugs! %s.",
+    "Heatmaps! %s. Love this job.",
 };
 static const uint8_t OATH_LINES_N = sizeof(OATH_LINES) / sizeof(OATH_LINES[0]);
 
@@ -412,7 +412,7 @@ static const DetLines DET_LINES[] = {
     { "Eyes in the sky. Literally.",         "Drone up. Wave if ready." },         // DRONE
     { "Plate reader spotted. Classic.",      "ALPR sees you. Smile." },            // ALPR
     { "Camera detected. Smile, legend.",     "Someone's watching. Look good." },   // CAMERA
-    { "Samsung tag pinged. Somebody's tagged.","Galaxy SmartTag nearby. Hm." },     // SAMSUNG_TAG
+    { "Samsung tag pinged. Someone's tagged.","Galaxy SmartTag nearby. Hm." },     // SAMSUNG_TAG
     { "Google's tracking network says hi.",  "Find My Device? Found by me." },     // GOOGLE_TAG
     { "Tile detected. Hope it's a friend.",  "Something tiny is tracking something." }, // TILE
     { "Ring cam spotted. Smile for Amazon.", "Someone's doorbell is judging you." },    // RING
@@ -1007,12 +1007,12 @@ static const char* buildStatLine() {
             break;
         case 2:
             snprintf(s_statBuf, sizeof(s_statBuf),
-                     "You've petted me %lu times. Not that I'm counting.", (unsigned long)s_petCount);
+                     "%lu pets. Not that I'm counting.", (unsigned long)s_petCount);
             break;
         default: {
             uint32_t mins = s_bestClearMs / 60000;
             snprintf(s_statBuf, sizeof(s_statBuf),
-                     "Best clear streak: %lu min. Bet we beat it.", (unsigned long)mins);
+                     "Best streak: %lu min. Let's beat it.", (unsigned long)mins);
             break;
         }
     }
@@ -1028,20 +1028,20 @@ static const char* buildStatLine() {
 // the wrong row's lines for a while. Folded into idle chatter
 // alongside buildStatLine() (see tick()).
 static const char* const BG_LINES[][3] = {
-    /* DIGITAL   */ { "Digital rain again. Very hacker of me.", "Falling code, brown fur. Bold combo.", "I could read this if I tried. I won't." },
-    /* STARFIELD */ { "Starfield's up. Feeling cosmic.", "Somewhere out there, a bigger cryptid.", "Space is just the woods, but darker." },
-    /* TOASTERS  */ { "Flying toasters. A classic.", "Nobody needs that much toast airborne.", "After Dark energy today." },
+    /* DIGITAL   */ { "Digital rain. Very hacker of me.", "Falling code, brown fur. Bold combo.", "I could read this. I won't." },
+    /* STARFIELD */ { "Starfield's up. Feeling cosmic.", "Out there: a bigger cryptid.", "Space is just the woods, but darker." },
+    /* TOASTERS  */ { "Flying toasters. A classic.", "Nobody needs that much flying toast.", "After Dark energy today." },
     /* AQUARIUM  */ { "Aquarium mode. Very zen.", "Fish don't do opsec. Rookies.", "I'd get a tank but I'm camera-shy." },
-    /* TERMINAL  */ { "Terminal log background. Very my speed.", "Green text, brown fur, good times.", "Looks official. It's mostly vibes though." },
+    /* TERMINAL  */ { "Terminal background. My speed.", "Green text, brown fur, good times.", "Looks official. Mostly vibes." },
     /* FIREFLIES */ { "Fireflies out tonight. Nice.", "Little lights, big ambiance.", "They're not surveillance. I checked." },
-    /* FIRE      */ { "Fire background. Cozy, not concerning.", "Warm vibes, zero smoke alarms.", "Nothing's actually burning. Probably." },
-    /* SNOWFALL  */ { "Snowing again. Big feet, better traction.", "Perfect weather for leaving mysterious tracks.", "Cold out. I'm built for this." },
-    /* SPECTRUM  */ { "RF spectrum's live. That's the real stuff.", "This is actual signal data. Neat, right?", "Watching the airwaves. Very on-brand." },
+    /* FIRE      */ { "Fire background. Cozy, not scary.", "Warm vibes, zero smoke alarms.", "Nothing's actually burning. Probably." },
+    /* SNOWFALL  */ { "Snow again. Big feet, good grip.", "Good weather for mysterious tracks.", "Cold out. I'm built for this." },
+    /* SPECTRUM  */ { "RF spectrum's live. Real stuff.", "Actual signal data. Neat, right?", "Watching the airwaves. Very on-brand." },
     // TUNNEL is retired and unreachable; the row stays because the assert
     // below counts rows, and a missing one would silently shift every
     // background after it onto the wrong lines.
-    /* TUNNEL    */ { "Wireframe tunnel. Very retro-future.", "Feels like we're going somewhere. We're not.", "80s sci-fi vibes today." },
-    /* SYNTHWAVE */ { "That sunset never actually sets. I checked.", "Grid goes on forever. So does the drive.", "Look at that reflection. Water we even doing." },
+    /* TUNNEL    */ { "Wireframe tunnel. Very retro-future.", "Feels like we're going places. Nope.", "80s sci-fi vibes today." },
+    /* SYNTHWAVE */ { "That sunset never sets. I checked.", "The grid goes on forever.", "Nice reflection. Water we even doing." },
     // He is switched off in boring mode, so nobody will ever hear these.
     // Written anyway: the assert below wants a row, and a placeholder row
     // is how the last set of stale lines got in.
@@ -1062,7 +1062,7 @@ static_assert(sizeof(BG_LINES) / sizeof(BG_LINES[0]) == Settings::BACKGROUND_COU
 enum Egg : uint8_t { EGG_WOLF, EGG_CHROME, EGG_PET, EGG_EYE, EGG_PARKA, EGG_N };
 static const char* const HINTS[EGG_N][3] = {
     /* FIRE: five taps on the moon */
-    { "That moon's got a werewolf look to it.",
+    { "That moon looks a bit werewolfy.",
       "The moon might answer if you knock.",
       "Tap the moon five times, quick!" },
     /* TOASTERS: the rare gold toaster */
@@ -1070,16 +1070,16 @@ static const char* const HINTS[EGG_N][3] = {
       "The gold ones are rare. Catch one.",
       "See a gold toaster? Tap it!" },
     /* TOASTERS: the little guy who walks the ground */
-    { "Something little wanders by sometimes.",
-      "A little guy walks by every few minutes.",
-      "When the little guy walks by, tap him!" },
+    { "Something little wanders by.",
+      "A little guy walks by sometimes.",
+      "When the little guy walks by, tap!" },
     /* STARFIELD: two big eyes in a row */
     { "Sometimes space looks back at you.",
       "Catch a big eye while it's close.",
       "Tap two big eyes in a row. Miss none!" },
     /* SNOWFALL: five knocks on the lodge */
-    { "That lodge on the ridge looks lived in.",
-      "Five windows on that lodge. Wonder why.",
+    { "That lodge on the ridge? Lived in.",
+      "Five windows on that lodge. Why?",
       "Knock on the lodge five times. Quick!" },
 };
 static uint8_t s_hintSaid[EGG_N] = {};
@@ -1324,7 +1324,7 @@ void trigger(Event evt, DetectionType dt, uint32_t lifetimeTotal, uint32_t hitCo
             }
             if (hit > 0) {
                 snprintf(s_milestoneBuf, sizeof(s_milestoneBuf),
-                         "Pet #%lu! We're basically friends now.", (unsigned long)hit);
+                         "Pet #%lu! We're friends now.", (unsigned long)hit);
                 say(s_milestoneBuf, 5500);
             } else {
                 say(pick(PET_LINES, 20), MIN_BUBBLE_MS);
@@ -1934,59 +1934,59 @@ static void say(const char* line, uint32_t ms);
 // Only ever spoken when the real clock is set (see clock.h). Nothing here
 // changes how he looks: the hour changes what he says, not what he is.
 static const char* const EARLY_LINES[] = {      // five to eight
-    "Up early. Or not down yet. Either way, hi.",
+    "Up early, or not down yet? Hi.",
     "Coffee first. Then the block.",
-    "Dawn patrol. Two routers and a squirrel so far.",
-    "The birds are on the air before anybody's phone.",
+    "Dawn patrol. Routers and a squirrel.",
+    "The birds are up before the phones.",
 };
 static const char* const MORNING_LINES[] = {    // eight to eleven
-    "Morning shift. Inbox zero, detections zero.",
-    "Delivery vans are the busiest thing on the air right now.",
+    "Inbox zero. Detections zero.",
+    "Delivery vans own the airwaves.",
     "Nine to five, but for cryptids.",
-    "Good morning. I've been up all night. I'm a screen.",
+    "Morning. Up all night. I'm a screen.",
 };
 static const char* const LUNCH_LINES[] = {      // eleven to two
     "Lunch. Get me nothing, I'm a screen.",
-    "Half the block just walked past with Bluetooth on.",
+    "Half the block walked by. Bluetooth.",
     "Midday. Peak phones. Peak everything.",
-    "Eat something. The scanner can watch itself for ten minutes.",
+    "Eat something. I'll mind the scanner.",
 };
 static const char* const SLUMP_LINES[] = {      // two to five
-    "Three o'clock slump. Even the routers are yawning.",
-    "Afternoon. Nothing moves but the ALPRs.",
-    "This is the hour where I question the WiFi.",
-    "Stretch. You've been sitting since lunch. I checked.",
+    "Three o'clock. Routers are yawning.",
+    "Nothing moves but the ALPRs.",
+    "This hour, I question the WiFi.",
+    "Stretch. You've sat since lunch.",
 };
 static const char* const EVENING_LINES[] = {    // five to nine
-    "Evening. The commuters are lighting up the air.",
-    "Quitting time somewhere. Not here. Here we scan.",
-    "Golden hour. Best light for spotting cameras.",
-    "Dinner plans? Mine's watching channel six.",
+    "Evening. Commuters light up the air.",
+    "Quitting time. Not here. We scan.",
+    "Golden hour. Best light for cameras.",
+    "Dinner plans? Mine's channel six.",
 };
 static const char* const NIGHT_LINES[] = {      // nine to eleven
-    "Getting late. The trackers don't sleep, but you should.",
-    "Night shift. Just me and the smart bulbs.",
-    "The good hackers are only just waking up.",
-    "Quiet on the air. That's when you listen hardest.",
+    "Trackers don't sleep. You should.",
+    "Night shift. Me and the smart bulbs.",
+    "The good hackers are just waking up.",
+    "Quiet air. Listen hardest now.",
 };
 static const char* const LATE_LINES[] = {       // eleven to five
-    "It's very late. Go to bed. I'll take the watch.",
-    "Nothing good happens on Bluetooth after midnight.",
+    "Go to bed. I'll keep watch.",
+    "No good Bluetooth after midnight.",
     "Just us and the routers now.",
-    "If you're up at this hour, so am I. Fair.",
+    "You're up at this hour? Me too.",
 };
 static const char* const MONDAY_LINES[] = {
-    "Monday. The cameras don't care, but I feel it.",
-    "Monday. Everybody's phone is back at work, and so is everybody's tracker.",
+    "Monday. Cameras don't care. I do.",
+    "Monday. Phones and trackers at work.",
 };
 static const char* const FRIDAY_LINES[] = {
-    "Friday. Even the Flock cams look tired.",
-    "Friday. Take me somewhere with worse WiFi.",
+    "Friday. Even Flock cams are tired.",
+    "Friday. Take me somewhere offline.",
 };
 static const char* const WEEKEND_LINES[] = {
-    "Weekend. The neighborhood's phones are all home.",
-    "Saturday scanning. A cryptid's day off is a day scanning something else.",
-    "Weekend. Nothing to catch but the lawnmower's Bluetooth.",
+    "Weekend. Every phone is home.",
+    "Saturday. My day off. Still scanning.",
+    "Weekend. Just lawnmower Bluetooth.",
 };
 
 static const char* pickTimeLine() {
@@ -2009,15 +2009,15 @@ static const char* pickTimeLine() {
 // last one said is kept in NVS beside the day he was born.
 struct DayMilestone { uint16_t days; const char* line; };
 static const DayMilestone DAY_MILESTONES[] = {
-    { 1000, "A thousand days. That's a lot of Flocks." },
-    {  730, "Two years today. Still nobody's caught us." },
-    {  500, "Five hundred days. I've forgotten what the box looked like." },
-    {  365, "A year. A whole year. Nobody caught us." },
-    {  200, "Two hundred days together. I'd get a cake but I can't hold one." },
-    {  100, "A hundred days. Send cake. Or batteries." },
-    {   30, "A month. I know this desk better than my own cave." },
-    {    7, "A week with you. Nobody's caught us yet." },
-    {    1, "Day two together. I've stopped counting boots." },
+    { 1000, "A thousand days. A lot of Flocks." },
+    {  730, "Two years. Nobody's caught us." },
+    {  500, "Five hundred days. What box?" },
+    {  365, "A whole year. Nobody caught us." },
+    {  200, "Two hundred days. Cake? No hands." },
+    {  100, "A hundred days. Send cake." },
+    {   30, "A month. This desk beats my cave." },
+    {    7, "A week. Nobody's caught us yet." },
+    {    1, "Day two. Stopped counting boots." },
 };
 
 const char* takeDayLine() {
@@ -2035,7 +2035,7 @@ const char* takeDayLine() {
         if      (h < 5)  fmt = random(0, 2) ? "Past midnight. %s, technically. Hi." : "New day. %s. Same me.";
         else if (h < 12) fmt = Clock::weekend() ? (random(0, 2) ? "Morning. %s. Nowhere to be." : "%s. Weekend. Sleep in, I've got this.")
                                                 : (random(0, 2) ? "Morning. %s." : "%s. Coffee's on you.");
-        else if (h < 17) fmt = random(0, 2) ? "Afternoon. %s. First I've seen of you." : "%s. You're late. I'm not.";
+        else if (h < 17) fmt = random(0, 2) ? "Afternoon. %s. Finally, you." : "%s. You're late. I'm not.";
         else             fmt = random(0, 2) ? "Evening. %s. Late start for us." : "%s. Better late than never.";
         snprintf(buf, sizeof buf, fmt, date);
         return buf;
@@ -2234,7 +2234,7 @@ static const char* const SCAN_FOUND_LINES[] = {
 // one place someone learns there's no compass, just a strength meter
 // you sweep by hand.
 static const char* const HUNT_STARTED_LINE =
-    "No compass. Turn your body -- weaker means it's behind you.";
+    "Weaker means it's behind you.";
 static const char* const HUNT_FIRST_SIGNAL_LINES[] = {
     "Oh, there it is!",
     "Got a read. Start walking.",
@@ -2258,7 +2258,7 @@ static const char* const HUNT_HOT_LINES[] = {
     "Look down. It might BE down.",
 };
 static const char* const HUNT_STALLED_LINES[] = {
-    "Still at it? Respect. Or stubbornness.",
+    "Still at it? Respect.",
     "We've been here a while, chief.",
     "Maybe try a lap around the block?",
 };
@@ -2479,25 +2479,25 @@ static const Exchange HANG_EXCHANGES[] = {
     // and short. Which is which changes with who's hosting.
     { "Quiet night. Suspiciously quiet.",            "I could fix that.",
       "Please don't."                                   },
-    { "I've seen things that would curl your fur.",  "Was it the printer?",
+    { "I've seen things. Fur-curling things.",  "Was it the printer?",
       "It was the printer."                             },
-    { "Great galloping gateways, is that a doorbell?", "Can we arrest it?",
+    { "Is that a doorbell?", "Can we arrest it?",
       "We can look at it sternly."                      },
-    { "In my professional opinion, nothing's happening.", "Your opinion's not professional.",
+    { "Expert opinion: nothing's happening.", "Your opinion's not professional.",
       "It's freelance."                                 },
-    { "I've filed the evening under 'uneventful'.",  "I filed it under 'yet'.",
+    { "Evening filed under 'uneventful'.",  "I filed it under 'yet'.",
       "That's not a category."                          },
-    { "I sense a great disturbance in the WiFi.",    "That's the microwave.",
-      "The microwave is a person of interest."          },
-    { "Two of us. The neighborhood's safest block.",  "The neighborhood should be worried.",
+    { "I sense a disturbance in the WiFi.",    "That's the microwave.",
+      "The microwave is a suspect."          },
+    { "Two of us. Safest block in town.",  "The neighborhood should be worried.",
       "The neighborhood should be thrilled."            },
-    { "Somewhere out there a tracker's thinking about us.", "Let it come.",
+    { "A tracker's thinking about us.", "Let it come.",
       "Let it come slowly. I'm comfortable."             },
-    { "If this were a case I'd call it closed.",      "You'd call it lunch.",
+    { "If this were a case: closed.",      "You'd call it lunch.",
       "Same thing."                                     },
     { "Holy hopping hotspots. Nothing again.",        "I love nothing. Nothing's the best.",
       "Nothing pays the same as something."             },
-    { "Any last words before another quiet hour?",   "Crime!",
+    { "Last words before a quiet hour?",   "Crime!",
       "You always say that."                            },
     { "My gut says something's coming.",             "Your gut's been wrong since Tuesday.",
       "My gut has a record, yes."                       },
@@ -2885,7 +2885,7 @@ static const char* const WATCH_ALERT_LINES[] = {
     "Called it.",
     "Told you it'd show back up.",
     "Yep. That's the one you're watching.",
-    "Back again, huh? Persistent little thing.",
+    "Back again? Persistent little thing.",
 };
 
 // STARTED's hint bubble gets a grace window nothing else is allowed to

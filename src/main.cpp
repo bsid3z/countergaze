@@ -1457,8 +1457,8 @@ static void enterAlert(const Detection& d) {
         uiAlertSetLastFree(s_alertLastFree);
         if (night && !first) {
             static const char* const NIGHT_LINES[] = {
-                "A %s at this hour. That's not nothing.", "%s. At night. I don't love it.",
-                "Who runs a %s past midnight? Noted.",   "A %s while the street's asleep. Hm.",
+                "A %s at this hour. Not nothing.", "%s. At night. I don't love it.",
+                "Who runs a %s past midnight? Noted.",   "A %s while the street sleeps.",
             };
             snprintf(s_firstLine, sizeof s_firstLine, NIGHT_LINES[random(0, 4)],
                      detectionTypeName(d.type));
@@ -1466,7 +1466,7 @@ static void enterAlert(const Detection& d) {
         if (first) {
             static const char* const FIRST_LINES[] = {
                 "A %s! Never had one of those.", "First %s ever. Mark the date.",
-                "New one for the book: %s.",     "A %s. So that's what they look like.",
+                "New one for the book: %s.",     "A %s. So that's one.",
             };
             snprintf(s_firstLine, sizeof s_firstLine, FIRST_LINES[random(0, 4)],
                      detectionTypeName(d.type));
