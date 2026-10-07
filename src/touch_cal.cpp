@@ -1,5 +1,6 @@
 // SquachWatch-CYD — persistent touch calibration
 #include "touch_cal.h"
+#include "theme.h"
 #include <Preferences.h>
 #include <Arduino.h>
 #include <math.h>
@@ -126,7 +127,7 @@ void reset() {
 static bool sampleCorner(TFT_eSPI& t, RawReader readRaw, int cx, int cy,
                          uint16_t bg, uint16_t accent, const char* label,
                          int16_t& aOut, int16_t& bOut) {
-    t.setTextSize(1);
+    Theme::setSmallText(t, label, t.width() - 12);
     t.setTextColor(accent, bg);
     t.setCursor(6, 6);
     t.print(label);
@@ -205,8 +206,8 @@ bool runInteractive(TFT_eSPI& t, RawReader readRaw,
         if (!sampleCorner(t, readRaw, cx[i], cy[i], bg, accent, labels[i], a[i], b[i])) {
             t.fillRect(0, 0, w, h, bg);
             t.setTextColor(accent, bg);
-            t.setTextSize(1);
             const char* fail = "No touch detected -- try again";
+            Theme::setSmallText(t, fail, w - 8);
             int fw = t.textWidth(fail);
             t.setCursor((w - fw) / 2, h / 2 - 6);
             t.print(fail);
@@ -243,8 +244,8 @@ bool runInteractive(TFT_eSPI& t, RawReader readRaw,
     // again.
     t.fillRect(0, 0, w, h, bg);
     t.setTextColor(accent, bg);
-    t.setTextSize(1);
     const char* fail = "Calibration failed -- try again";
+    Theme::setSmallText(t, fail, w - 8);
     int fw = t.textWidth(fail);
     t.setCursor((w - fw) / 2, h / 2 - 6);
     t.print(fail);

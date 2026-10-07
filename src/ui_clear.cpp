@@ -1552,6 +1552,8 @@ static bool tutorReply() {
 static void drawRedBubble(TFT_eSPI& t, int cx, int headTop, const char* from, const char* line) {
     t.setTextSize(1);
     t.setTextWrap(false);
+    // The sender's caption at Theme::SMALL_TEXT; capH is its band, 14 at size 1.
+    const int capH = 8 * Theme::SMALL_TEXT + 6;
     const int w = t.width();
     // The message itself in font 2, the same face Squachy's own bubble uses
     // now; the sender's name stays in the small font above it, a caption.
@@ -1568,10 +1570,11 @@ static void drawRedBubble(TFT_eSPI& t, int cx, int headTop, const char* from, co
         if (rw > bw) bw = rw;
     }
     Theme::bubbleFontOff(t);
+    t.setTextSize(Theme::SMALL_TEXT);
     if (t.textWidth(from) > bw) bw = t.textWidth(from);
     bw += 12;
     if (bw > w - 8) bw = w - 8;
-    const int bh = 14 + n * lineH + 3;
+    const int bh = capH + n * lineH + 3;
     int bx = cx - bw / 2;
     if (bx < 4) bx = 4;
     if (bx + bw > w - 4) bx = w - 4 - bw;
@@ -1585,10 +1588,11 @@ static void drawRedBubble(TFT_eSPI& t, int cx, int headTop, const char* from, co
     t.setTextColor(Theme::W95_LIGHT, Theme::RED);
     t.setCursor(bx + 6, by + 3);
     t.print(from);
+    t.setTextSize(1);
     Theme::bubbleFontOn(t);
     t.setTextColor(Theme::WHITE, Theme::RED);
     for (uint8_t i = 0; i < n; i++) {
-        t.setCursor(bx + 6, by + 13 + i * lineH + Theme::bubbleAscent());
+        t.setCursor(bx + 6, by + capH - 1 + i * lineH + Theme::bubbleAscent());
         t.print(rows[i]);
     }
     Theme::bubbleFontOff(t);
@@ -1708,9 +1712,10 @@ static void drawWatchPill(TFT_eSPI& t, int screenW, bool watching, bool hunting)
     // The two are independent slots (see DetectionEngine), so both can be on.
     const char* txt = hunting ? "HUNT" : "WATCH";
     const uint16_t accent = hunting ? Theme::AMBER : Theme::CYAN;
-    t.setTextSize(1);
+    // Theme::SMALL_TEXT: size 2 on the 3.5" panel, filling the 20px bar.
+    t.setTextSize(Theme::SMALL_TEXT);
     // 16 in a 20px bar: two rows of clearance top and bottom.
-    const int bh = 16;
+    const int bh = Theme::SMALL_TEXT > 1 ? 20 : 16;
     const int bw = 16 + t.textWidth(txt) + 7;
     // Left edge of the free span, past the gear. The right limit is the rotate
     // icon (28) plus the lock (26) -- reserve both whether or not either is
@@ -1726,8 +1731,9 @@ static void drawWatchPill(TFT_eSPI& t, int screenW, bool watching, bool hunting)
     t.fillCircle(x + 9, y + bh / 2, 1, accent);
     if (hunting) t.drawFastHLine(x + 3, y + bh / 2, 12, accent);
     t.setTextColor(accent, Theme::BG);
-    t.setCursor(x + 16, y + (bh - 8) / 2);
+    t.setCursor(x + 16, y + (bh - t.fontHeight()) / 2);
     t.print(txt);
+    t.setTextSize(1);
     // A finger-sized target: the bar is only 20px tall, so grow downward.
     s_wpX = (int16_t)(x - 4); s_wpY = (int16_t)0;
     s_wpW = (int16_t)(bw + 8); s_wpH = (int16_t)(bh + 14);

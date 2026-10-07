@@ -69,42 +69,70 @@ void uiMeshWarnTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     t.setCursor(8, 6);
     t.print("SQUACHMESH");
 
-    t.setTextSize(1);
-    t.setTextColor(Theme::AMBER, Theme::BG);
-    t.setCursor(8, 26);
-    t.print("THIS MAKES YOU TRACKABLE");
-
-    // Theme::wrapText fills fixed 48-char rows, so the wrap width is capped
-    // at what 47 characters occupy regardless of how wide the panel is. At
-    // 320px the margins alone would allow 50, and the two extra characters
-    // would be written past the end of the row.
-    const int charW = t.textWidth("M");
-    int maxW = w - 16;
-    if (maxW > 47 * charW) maxW = 47 * charW;
-
-    const int lineH = t.fontHeight() + 1;
-    int y = 40;
-    t.setTextColor(Theme::WHITE, Theme::BG);
-    for (uint8_t p = 0; p < PARA_N; p++) {
-        char lines[8][48];
-        const uint8_t n = Theme::wrapText(t, PARAS[p], maxW, lines, 8);
-        for (uint8_t i = 0; i < n; i++) {
-            t.setCursor(8, y);
-            t.print(lines[i]);
-            y += lineH;
-        }
-        y += 4;                      // a gap between paragraphs, not a line
-    }
-
+    // Size 2 (Theme::SMALL_TEXT) when the heading, every paragraph and the
+    // question all fit above the buttons at that size, measured first; the
+    // size-1 layout below otherwise.
     int yesX, noX, by;
     buttonGeom(t, yesX, noX, by);
+    bool bigDone = false;
+    {
+        const int bigQY = by - 6 - 8 * Theme::SMALL_TEXT;
+        int bigH = 0;
+        if (Theme::SMALL_TEXT > 1) {
+            for (uint8_t p = 0; p < PARA_N; p++)
+                bigH += Theme::drawWrapped(t, 8, 0, w - 16, PARAS[p], Theme::WHITE, Theme::BG, false, false) + 4;
+        }
+        if (Theme::SMALL_TEXT > 1 && 50 + bigH <= bigQY - 4) {
+            Theme::setSmallText(t, "THIS MAKES YOU TRACKABLE", w - 16);
+            t.setTextColor(Theme::AMBER, Theme::BG);
+            t.setCursor(8, 28);
+            t.print("THIS MAKES YOU TRACKABLE");
+            int y = 50;
+            for (uint8_t p = 0; p < PARA_N; p++)
+                y += Theme::drawWrapped(t, 8, y, w - 16, PARAS[p], Theme::WHITE, Theme::BG) + 4;
+            const char* q = "Turn on SquachMesh?";
+            t.setTextSize(Theme::SMALL_TEXT);
+            t.setTextColor(Theme::CYAN, Theme::BG);
+            t.setCursor((w - t.textWidth(q)) / 2, bigQY);
+            t.print(q);
+            bigDone = true;
+        }
+    }
+    if (!bigDone) {
+        t.setTextSize(1);
+        t.setTextColor(Theme::AMBER, Theme::BG);
+        t.setCursor(8, 26);
+        t.print("THIS MAKES YOU TRACKABLE");
 
-    // The question sits with the buttons rather than at the top, so whatever
-    // is being answered is the last thing read before answering it.
-    t.setTextColor(Theme::CYAN, Theme::BG);
-    const char* q = "Turn on SquachMesh?";
-    t.setCursor((w - t.textWidth(q)) / 2, by - 14);
-    t.print(q);
+        // Theme::wrapText fills fixed 48-char rows, so the wrap width is capped
+        // at what 47 characters occupy regardless of how wide the panel is. At
+        // 320px the margins alone would allow 50, and the two extra characters
+        // would be written past the end of the row.
+        const int charW = t.textWidth("M");
+        int maxW = w - 16;
+        if (maxW > 47 * charW) maxW = 47 * charW;
+
+        const int lineH = t.fontHeight() + 1;
+        int y = 40;
+        t.setTextColor(Theme::WHITE, Theme::BG);
+        for (uint8_t p = 0; p < PARA_N; p++) {
+            char lines[8][48];
+            const uint8_t n = Theme::wrapText(t, PARAS[p], maxW, lines, 8);
+            for (uint8_t i = 0; i < n; i++) {
+                t.setCursor(8, y);
+                t.print(lines[i]);
+                y += lineH;
+            }
+            y += 4;                      // a gap between paragraphs, not a line
+        }
+
+        // The question sits with the buttons rather than at the top, so whatever
+        // is being answered is the last thing read before answering it.
+        t.setTextColor(Theme::CYAN, Theme::BG);
+        const char* q = "Turn on SquachMesh?";
+        t.setCursor((w - t.textWidth(q)) / 2, by - 14);
+        t.print(q);
+    }
 
     // NO is not the quiet one. A consent dialog whose decline is styled as
     // the lesser option is doing the opposite of what it is for, so both are

@@ -74,7 +74,7 @@ void title(TFT_eSPI& t, const char* s) {
 }
 
 int para(TFT_eSPI& t, int y, const char* text, uint16_t col) {
-    t.setTextSize(1);
+    t.setTextSize(Theme::SMALL_TEXT);
     t.setTextColor(col, Theme::BG);
     // Theme::wrapText fills 48-character rows; cap the width at 47 of them.
     const int charW = t.textWidth("M");
@@ -110,9 +110,9 @@ int bigWords(TFT_eSPI& t, int y, const char* const words[MeshMsg::PHRASE_WORDS],
 
 void status(TFT_eSPI& t) {
     if (!s_status) return;
-    t.setTextSize(1);
+    Theme::setSmallText(t, s_status, t.width() - 16);
     t.setTextColor(s_statusCol, Theme::BG);
-    t.setCursor(8, t.height() - BH - 6 - 12);
+    t.setCursor(8, t.height() - BH - 6 - 4 - t.fontHeight());
     t.print(s_status);
 }
 
@@ -140,10 +140,10 @@ void drawShow(TFT_eSPI& t) {
                                    "by ADD TO SQUAD, in person.", Theme::W95_LIGHT);
         // The switch, drawn as a settings row.
         {
-            const int rh = 22;
+            const int rh = Theme::SMALL_TEXT > 1 ? 26 : 22;
             s_showRow = { 3, (int16_t)(y + 4), (int16_t)(t.width() - 10), rh };
             Theme::drawListRowPanel(t, t.width(), s_showRow.y, rh + 2);
-            t.setTextSize(1);
+            t.setTextSize(Theme::SMALL_TEXT);
             t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
             t.setCursor(10, s_showRow.y + (rh - t.fontHeight()) / 2);
             t.print("SHOW PHRASE");
@@ -192,8 +192,16 @@ void countLetters() {
 // being chosen (its letter, once there is one), then a dash per word to go.
 // It is only there to say where you are, and every row it does not take goes
 // to the keys.
-void progress(TFT_eSPI& t, int y) {
-    t.setTextSize(1);
+// Size 2 (Theme::SMALL_TEXT) when the whole line fits the width, measured
+// with every word at its longest; returns the y under it for the grid.
+int progress(TFT_eSPI& t, int y) {
+    t.setTextSize(Theme::SMALL_TEXT);
+    if (Theme::SMALL_TEXT > 1) {
+        int need = 8;
+        for (int i = 0; i < MeshMsg::PHRASE_WORDS; i++)
+            need += t.textWidth(i < s_pickN ? MeshMsg::WORDS[s_picked[i]] : "WWWWWWW") + 6;
+        if (need > t.width() - 4) t.setTextSize(1);
+    }
     // One dark strip under the whole line. Each piece prints with the ground
     // colour behind it, and over a bright background those separate little
     // boxes read as blocks rather than as dashes.
@@ -209,6 +217,7 @@ void progress(TFT_eSPI& t, int y) {
         t.print(s);
         x += t.textWidth(s) + 6;
     }
+    return y + t.fontHeight() + 6;
 }
 
 // Picking is two steps, and only one of them is on screen at a time: the
@@ -223,9 +232,7 @@ void drawPick(TFT_eSPI& t) {
     char tb[20];
     snprintf(tb, sizeof tb, "WORD %u OF 5", (unsigned)(s_pickN + 1));
     title(t, tb);
-    progress(t, 28);
-
-    const int top = 42, bottom = h - BH - 6 - 6, gridH = bottom - top;
+    const int top = progress(t, 28), bottom = h - BH - 6 - 6, gridH = bottom - top;
     s_wordN = 0;
     for (bool& on : s_letterOn) on = false;
 

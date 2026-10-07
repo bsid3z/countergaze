@@ -57,18 +57,16 @@ void uiNudgeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     t.fillRect(0, 0, w, h, Theme::BG);
     Theme::drawListHeading(t, "SQUAD UPDATE", Theme::VAPOR_PINK);
 
-    t.setTextSize(1);
     int y = Theme::LIST_TOP + Theme::LIST_HEADING_H + 10;
-    char line[48];
-    snprintf(line, sizeof line, "%s asked the squad to update", s_from);
-    centred(t, y, Theme::WHITE, line);
-    y += 12;
-    snprintf(line, sizeof line, "to %s. This board runs %s.", s_ver, OtaCore::runningVersion());
-    centred(t, y, Theme::WHITE, line);
-    y += 12;
-    centred(t, y, Theme::W95_LIGHT, "It joins WiFi, installs, and restarts.");
-    y += 12;
-    centred(t, y, Theme::W95_LIGHT, "Nothing changes if that fails.");
+    char line[96];
+    // Wrapped at Theme::SMALL_TEXT rather than four fixed size-1 lines.
+    snprintf(line, sizeof line, "%s asked the squad to update to %s. This board runs %s.",
+             s_from, s_ver, OtaCore::runningVersion());
+    y += Theme::drawWrapped(t, 8, y, w - 16, line, Theme::WHITE, Theme::BG, true);
+    y += Theme::drawWrapped(t, 8, y, w - 16,
+                            "It joins WiFi, installs, and restarts. Nothing changes if that fails.",
+                            Theme::W95_LIGHT, Theme::BG, true);
+    y -= 12;   // the countdown below adds its own 12
 
     // The count, big, in the middle of what is left.
     const Btns b = btns(t);

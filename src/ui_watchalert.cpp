@@ -7,7 +7,7 @@
 // Shared by the drawing and the hit test so the two cannot drift -- the rule
 // every other panel here follows. Full width minus a margin: it is the only
 // control on the screen, so there is nothing for it to crowd.
-static const int REMOVE_H = 26;
+static const int REMOVE_H = Theme::SMALL_TEXT > 1 ? 30 : 26;
 static void removeRect(TFT_eSPI& t, int& x, int& y, int& w, int& h) {
     const int margin = 10;
     w = t.width() - 2 * margin;
@@ -21,8 +21,11 @@ static void removeRect(TFT_eSPI& t, int& x, int& y, int& w, int& h) {
 // cannot hold it. Shortened rather than shrunk: size-1 is already the
 // smallest the built-in font offers.
 static const char* removeLabel(TFT_eSPI& t, int w) {
+    // drawButton() takes the label up to Theme::SMALL_TEXT where it fits, so
+    // the full label wins only if it fits at that size: otherwise UNWATCH at
+    // size 2 beats the long one at size 1.
     const char* full = "REMOVE FROM WATCH LIST";
-    t.setTextSize(1);
+    t.setTextSize(Theme::SMALL_TEXT);
     return (t.textWidth(full) <= w - 8) ? full : "UNWATCH";
 }
 
@@ -57,7 +60,7 @@ void uiWatchAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, boo
     // that strip, and Squachy erases his own footprint with flat Theme::BG
     // rather than this screen's pulsing red -- so anything he walks over gets
     // stamped out in the wrong colour. Give him the room above them instead.
-    const int availHeight = h - topY - (REMOVE_H + 30);
+    const int availHeight = h - topY - (REMOVE_H + 22 + 8 * Theme::SMALL_TEXT);
     Squachy::tick(t, w / 2, topY, availHeight, now, advance);
 
     // Headline, outlined the same way CLEAR's ALL CLEAR/DETECTIONS
@@ -97,12 +100,15 @@ void uiWatchAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, boo
 
     // Sub-line: what's actually being watched, and the dismiss hint --
     // plain text, not outlined (same tier as CLEAR's counter row).
-    t.setTextSize(1);
+    // Size 2 on the 3.5" panel (Theme::SMALL_TEXT) where the label fits;
+    // the rows below step down by the same font height.
     t.setTextWrap(false);
+    Theme::setSmallText(t, eng.watchLabel(), w - 16);
     t.setTextColor(Theme::WHITE, bg);
     int sw2 = t.textWidth(eng.watchLabel());
     t.setCursor((w - sw2) / 2, ty + 30);
     t.print(eng.watchLabel());
+    const int lineStep = 8 * Theme::SMALL_TEXT + 6;
 
     // Signal-strength trend -- lets you tell "getting closer" from
     // "just sitting there" instead of only knowing it's in range at
@@ -112,8 +118,9 @@ void uiWatchAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, boo
     if (rssiN > 0) {
         char rbuf[24];
         snprintf(rbuf, sizeof(rbuf), "%d dBm", (int)eng.watchRssiAt(rssiN - 1));
+        t.setTextSize(Theme::SMALL_TEXT);
         int rw = t.textWidth(rbuf);
-        int labelY = ty + 44;
+        int labelY = ty + 30 + lineStep;
         t.setCursor((w - rw) / 2, labelY);
         t.print(rbuf);
 
@@ -126,7 +133,7 @@ void uiWatchAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, boo
             const int graphW = (w - 40 < 140) ? (w - 40) : 140;
             const int graphH = 24;
             const int gx = (w - graphW) / 2;
-            const int gy = labelY + 12;
+            const int gy = labelY + lineStep - 2;
 
             auto mapY = [&](int8_t rssi) {
                 int v = rssi;
@@ -155,10 +162,10 @@ void uiWatchAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, boo
     // rows 4px inside the button and it read as half-erased. The button's top
     // is at h - REMOVE_H - 10, so clear it by the font height plus a gap.
     const char* tapMsg = "tap anywhere to dismiss";
-    t.setTextSize(1);
+    Theme::setSmallText(t, tapMsg, w - 16);
     t.setTextColor(Theme::WHITE, bg);
     int tmw = t.textWidth(tapMsg);
-    t.setCursor((w - tmw) / 2, h - REMOVE_H - 10 - 8 - 6);
+    t.setCursor((w - tmw) / 2, h - REMOVE_H - 10 - t.fontHeight() - 6);
     t.print(tapMsg);
 
     int bx, by, bw, bh;

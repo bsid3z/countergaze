@@ -24,36 +24,36 @@ bool uiDiagnosticsHitBack(int x, int y, int screenW, int screenH) {
     return x >= bx && x <= bx + bw && y >= by && y <= by + bh;
 }
 
-static int drawLine(TFT_eSPI& t, int y, uint16_t labelColor, const char* label, const char* fmt, ...) {
-    t.setTextColor(labelColor, Theme::BG);
-    t.setCursor(6, y);
-    t.print(label);
+// The size the readout is drawn at this frame (see uiDiagnosticsTick), and
+// whether this pass only measures how tall it would come out.
+static uint8_t s_size    = 1;
+static bool    s_measure = false;
 
+static int drawLine(TFT_eSPI& t, int y, uint16_t labelColor, const char* label, const char* fmt, ...) {
     char buf[48];
     va_list args;
     va_start(args, fmt);
     vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
 
-    t.setTextColor(Theme::WHITE, Theme::BG);
-    t.setCursor(6 + t.textWidth(label) + 6, y);
-    t.print(buf);
+    // A line too wide for the screen at the big size drops to size 1 on its
+    // own rather than running off the edge.
+    t.setTextSize(s_size);
+    if (s_size > 1 && 6 + t.textWidth(label) + 6 + t.textWidth(buf) > t.width() - 4) t.setTextSize(1);
+    if (!s_measure) {
+        t.setTextColor(labelColor, Theme::BG);
+        t.setCursor(6, y);
+        t.print(label);
+        t.setTextColor(Theme::WHITE, Theme::BG);
+        t.setCursor(6 + t.textWidth(label) + 6, y);
+        t.print(buf);
+    }
     return y + t.fontHeight() + 2;
 }
 
-void uiDiagnosticsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, const DiagnosticsInfo& info) {
-    (void)now;
-    int w = t.width(), h = t.height();
-
-    Theme::drawTitleBar(t, ">> DIAGNOSTICS <<");
-
-    Theme::ButtonBarGeom bar = Theme::computeButtonBar(w, h);
-    int bodyTop = 16, bodyBottom = bar.y - 4;
-    t.fillRect(0, bodyTop, w, bodyBottom - bodyTop, Theme::BG);
-
-    t.setTextSize(1);
-    t.setTextWrap(false);
-    int y = bodyTop + 2;
+// Everything between the title and BACK. Returns the y it ended at.
+static int drawBody(TFT_eSPI& t, int top, int w, const DetectionEngine& eng, const DiagnosticsInfo& info) {
+    int y = top;
 
     y = drawLine(t, y, Theme::CYAN, "BOARD:", "%s (%s)", info.boardName,
                  info.usingCapTouch ? "capacitive" : "resistive");
@@ -207,6 +207,32 @@ void uiDiagnosticsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, co
                      (unsigned long)fs.count);
     }
 #endif
+
+    return y;
+}
+
+void uiDiagnosticsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, const DiagnosticsInfo& info) {
+    (void)now;
+    int w = t.width(), h = t.height();
+
+    Theme::drawTitleBar(t, ">> DIAGNOSTICS <<");
+
+    Theme::ButtonBarGeom bar = Theme::computeButtonBar(w, h);
+    int bodyTop = 16, bodyBottom = bar.y - 4;
+    t.fillRect(0, bodyTop, w, bodyBottom - bodyTop, Theme::BG);
+
+    t.setTextWrap(false);
+    // Size 2 (Theme::SMALL_TEXT) when the whole readout fits above BACK at
+    // that size, measured first; size 1 when it does not, which is
+    // landscape on the 3.5" panel. Twenty-odd lines do not fit there.
+    s_size = Theme::SMALL_TEXT;
+    if (s_size > 1) {
+        s_measure = true;
+        if (drawBody(t, bodyTop + 2, w, eng, info) > bodyBottom) s_size = 1;
+        s_measure = false;
+    }
+    drawBody(t, bodyTop + 2, w, eng, info);
+    t.setTextSize(1);
 
     int bx, by, bw, bh;
     backButtonRect(w, h, bx, by, bw, bh);

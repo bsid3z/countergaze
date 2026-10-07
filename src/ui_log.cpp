@@ -100,16 +100,19 @@ static void confirmRects(int screenW, int screenH,
                           int& infX, int& infY, int& infW, int& infH,
                           int& igX, int& igY, int& igW, int& igH,
                           int& cnX, int& cnY, int& cnW, int& cnH) {
-    pw = screenW - 40;
-    if (pw > 240) pw = 240;
+    // Wider and taller on the 3.5" panel: size-2 button labels ("MORE
+    // INFO", "STOP HUNT") and a size-2 question over the name.
+    const bool big = Theme::SMALL_TEXT > 1;
+    pw = screenW - (big ? 20 : 40);
+    if (pw > (big ? 300 : 240)) pw = big ? 300 : 240;
     // Was 132 for a 2x2 grid. IGNORE makes it three rows: WATCH/HUNT,
     // IGNORE/MORE INFO, then CANCEL alone across the bottom. CANCEL gets
     // the full width because it is the one button you hit by reflex and
     // the one that must never be mistaken for its neighbour.
-    ph = 164;
+    ph = big ? 190 : 164;
     px = (screenW - pw) / 2;
     py = (screenH - ph) / 2;
-    const int margin = 10, gap = 8, btnH = 24;
+    const int margin = 10, gap = 8, btnH = big ? 28 : 24;
     int btnW = (pw - 2 * margin - gap) / 2;
 
     cnY = py + ph - btnH - margin;
@@ -150,9 +153,9 @@ static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool 
     t.drawRoundRect(px, py, pw, ph, 6, Theme::PURPLE);
 
     t.setTextWrap(false);
-    t.setTextSize(1);
-    t.setTextColor(Theme::CYAN, Theme::BG);
     const char* q = "TRACK THIS TARGET?";
+    Theme::setSmallText(t, q, pw - 16);
+    t.setTextColor(Theme::CYAN, Theme::BG);
     int qw = t.textWidth(q);
     t.setCursor(px + (pw - qw) / 2, py + 8);
     t.print(q);
@@ -171,7 +174,7 @@ static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool 
     int lw = Theme::bangersTextWidth(upperLabel, Theme::BangersSize::MD);
     int maxLw = pw - 16;
     if (lw > maxLw) lw = maxLw; // clipped, not shrunk -- real labels fit comfortably as-is
-    Theme::drawBangersText(t, px + (pw - lw) / 2, py + 26, upperLabel, Theme::RED, Theme::BangersSize::MD);
+    Theme::drawBangersText(t, px + (pw - lw) / 2, py + 18 + t.fontHeight(), upperLabel, Theme::RED, Theme::BangersSize::MD);
 
     // See ui_rawscan.cpp's copy of this panel: toggling, so the label names
     // the next tap rather than the thing already done.
@@ -187,10 +190,20 @@ static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool 
 // testing) so the two can never drift apart -- same reasoning as
 // ui_rawscan.cpp's rowLayout(): rowH depends on live font metrics, not
 // a compile-time constant.
+// The size the detail line (MAC, signal, hits, timestamp) is drawn at:
+// Theme::SMALL_TEXT when the whole line fits across the screen at that size,
+// which on the 3.5" panel is landscape (it needs about 410px), else size 1.
+static uint8_t detailSize(TFT_eSPI& t) {
+    if (Theme::SMALL_TEXT < 2) return 1;
+    t.setTextSize(Theme::SMALL_TEXT);
+    const int need = 8 + t.textWidth("XX:XX:XX:XX:XX:XX -100dBm") + 3 + 12 + t.textWidth(" x1234") + 14;
+    return need <= t.width() ? Theme::SMALL_TEXT : 1;
+}
+
 static void rowLayout(TFT_eSPI& t, int bodyTop, int& detailY, int& rowH) {
     t.setTextSize(2);
     int nameH = t.fontHeight();
-    t.setTextSize(1);
+    t.setTextSize(detailSize(t));
     int detailH = t.fontHeight();
     // Each row is a card now, the same panel Settings draws: two pixels of
     // air above the type label, three below the detail line, and the card's
@@ -274,9 +287,9 @@ switch (Settings::background()) {
         t.setCursor((w - mw) / 2, bodyTop + bodyH / 3);
         t.print(msg);
 
-        t.setTextSize(1);
-        t.setTextColor(Theme::CYAN, Theme::BG);
         const char* sub = "no detections yet";
+        Theme::setSmallText(t, sub, w - 16);
+        t.setTextColor(Theme::CYAN, Theme::BG);
         int sw = t.textWidth(sub);
         t.setCursor((w - sw) / 2, bodyTop + bodyH / 3 + 35);
         t.print(sub);
@@ -297,10 +310,16 @@ switch (Settings::background()) {
     // INDEX (2 means "built-in font #2", not "current font at size
     // 2"), which was silently querying an unrelated font's metrics
     // instead of the GLCD font actually being drawn here.
+    const uint8_t ds = detailSize(t);
     t.setTextSize(2);
     int nameH = t.fontHeight();
-    t.setTextSize(1);
+    t.setTextSize(ds);
     int detailH = t.fontHeight();
+    // Detail columns: the original 116 / 168 at size 1, measured at size 2.
+    t.setTextSize(ds);
+    const int rssiX = ds > 1 ? 8 + t.textWidth("XX:XX:XX:XX:XX:XX ") : 116;
+    const int hitsX = ds > 1 ? rssiX + t.textWidth("-100dBm") + 3 + 12 + t.textWidth(" ") : 168;
+    const int arrow = 6 * ds;
     int detailY, rowH;
     rowLayout(t, bodyTop, detailY, rowH);     // the hit test's numbers, exactly
     const int topPad = detailY - nameH;
@@ -331,7 +350,7 @@ switch (Settings::background()) {
         const int labelEnd = 8 + t.textWidth(detectionTypeName(d->type));
 
         // MAC + RSSI line
-        t.setTextSize(1);
+        t.setTextSize(ds);
         t.setTextColor(kept ? dim : Theme::WHITE, Theme::BG);
         char mac[24];
         snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
@@ -344,7 +363,7 @@ switch (Settings::background()) {
         // at this font size) starting from x=8, so this column can't
         // start before ~114 without drawing on top of it.
         t.setTextColor(kept ? dim : Theme::CYAN, Theme::BG);
-        t.setCursor(116, y + detailY);
+        t.setCursor(rssiX, y + detailY);
         t.printf("%ddBm", d->rssi);
         // Closer or further since a couple of seconds ago, for a row that is
         // actually here: green up for nearer, red down for further, nothing
@@ -352,14 +371,14 @@ switch (Settings::background()) {
         // the same deadband, as the raw scan's NEARBY list.
         if (!kept && d->active) {
             const int delta = (int)d->rssi - (int)d->prevRssi;
-            const int ax = 116 + t.textWidth("-100dBm") + 3, ay = y + detailY;
-            if (delta >= 4)       t.fillTriangle(ax, ay + 6, ax + 6, ay + 6, ax + 3, ay, Theme::GREEN);
-            else if (delta <= -4) t.fillTriangle(ax, ay, ax + 6, ay, ax + 3, ay + 6, Theme::RED);
+            const int ax = rssiX + t.textWidth("-100dBm") + 3, ay = y + detailY;
+            if (delta >= 4)       t.fillTriangle(ax, ay + arrow, ax + arrow, ay + arrow, ax + arrow / 2, ay, Theme::GREEN);
+            else if (delta <= -4) t.fillTriangle(ax, ay, ax + arrow, ay, ax + arrow / 2, ay + arrow, Theme::RED);
         }
 
         // Hits
         t.setTextColor(kept ? dim : Theme::VAPOR_PURPLE, Theme::BG);
-        t.setCursor(168, y + detailY);
+        t.setCursor(hitsX, y + detailY);
         t.printf("x%u", d->hits);
 
         // Timestamp (right edge)

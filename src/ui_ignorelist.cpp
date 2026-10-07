@@ -7,7 +7,10 @@
 #include <stdio.h>
 
 static const int TOP_MARGIN = 16;
-static const int REMOVE_W   = 74;     // width of the tappable REMOVE zone
+// Width of the tappable REMOVE zone. Wider where the MAC and the button's
+// label are size 2 (Theme::SMALL_TEXT): "REMOVE" alone is 72px there.
+static const bool BIG       = Theme::SMALL_TEXT > 1;
+static const int REMOVE_W   = BIG ? 92 : 74;
 static int g_scroll = 0;
 
 // Same fixed-height-at-size-2 approach Settings and the detection filter
@@ -18,7 +21,7 @@ static void computeGeom(TFT_eSPI& t, int screenH, int& top, int& bodyBottom, int
     // Two lines per row now -- type above, MAC below -- so this is a fixed
     // height rather than one derived from a single line of text.
     (void)t;
-    rowH = 32;
+    rowH = BIG ? 42 : 32;
 }
 
 void uiIgnoreListInit(TFT_eSPI& t) {
@@ -51,15 +54,16 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, uint8_t idx) {
     char buf[20];
     snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    t.setTextSize(1);
+    t.setTextSize(Theme::SMALL_TEXT);
     t.setTextColor(Theme::WHITE, Theme::BG);
-    t.setCursor(6, y + 21);
+    t.setCursor(6, BIG ? y + 22 : y + 21);
     t.print(buf);
 
     // REMOVE, drawn as a real button so it reads as the one thing on the
     // row you can press. Its rect matches uiIgnoreListHitRemove() exactly.
-    const int bw = REMOVE_W - 12, bh = 20;
-    Theme::drawButton(t, w - REMOVE_W + 4, y + (hgt - bh) / 2, bw, bh, "REMOVE", false);
+    const int bw = REMOVE_W - 12, bh = BIG ? 28 : 20;
+    Theme::drawButton(t, w - REMOVE_W + 4, y + (hgt - bh) / 2, bw, bh, "REMOVE", false,
+                      Theme::SMALL_TEXT);
 
     t.drawFastHLine(4, y + hgt - 1, w - 8, Theme::PURPLE);
 }
@@ -85,13 +89,16 @@ void uiIgnoreListTick(TFT_eSPI& t, uint32_t now) {
         const char* m1 = "NOTHING MUTED";
         t.setCursor((w - t.textWidth(m1)) / 2, h / 2 - 26);
         t.print(m1);
-        t.setTextSize(1);
+        // Split so the longer line is 25 characters: 300px at size 2, inside
+        // a 320-wide portrait screen.
+        const char* m2 = "Tap IGNORE on an alert";
+        const char* m3 = "to mute a device you own.";
+        Theme::setSmallText(t, m3, w - 16);
         t.setTextColor(Theme::CYAN, Theme::BG);
-        const char* m2 = "Tap IGNORE on an alert to mute";
-        const char* m3 = "a device you own.";
+        const int lh = t.fontHeight() + 4;
         t.setCursor((w - t.textWidth(m2)) / 2, h / 2 + 2);
         t.print(m2);
-        t.setCursor((w - t.textWidth(m3)) / 2, h / 2 + 14);
+        t.setCursor((w - t.textWidth(m3)) / 2, h / 2 + 2 + lh);
         t.print(m3);
         return;
     }
@@ -107,7 +114,7 @@ void uiIgnoreListTick(TFT_eSPI& t, uint32_t now) {
     // longer than the screen without having to scroll to find out.
     char cnt[24];
     snprintf(cnt, sizeof(cnt), "%u / %u", (unsigned)n, (unsigned)IgnoreList::MAX);
-    t.setTextSize(1);
+    t.setTextSize(Theme::LIST_HEADING_TEXT);
     t.setTextColor(Theme::VAPOR_PURPLE, Theme::BG);
     t.setCursor(w - t.textWidth(cnt) - 8, Theme::LIST_TOP + (Theme::LIST_HEADING_H - t.fontHeight()) / 2);
     t.print(cnt);

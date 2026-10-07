@@ -28,10 +28,6 @@ static int g_scrollFor[4] = { 0, 0, 0, 0 };
 // the body so the last row cannot hide underneath it.
 static const int PINNED_BACK_H = 26;
 
-// Which groups are folded shut. Session-only on purpose: a fold is a "get this
-// out of my way for a minute", not a preference worth surviving a reboot.
-static bool s_folded[6] = { false, false, false, false, false, false };
-
 // Whether a watch/hunt target exists. Set every tick from the engine, read by
 // buildDisplayList() -- which has no engine of its own, and is called by the
 // hit test as well as the draw. Same pattern ui_clear.cpp uses for its crowd.
@@ -292,9 +288,6 @@ static uint8_t buildDisplayList(DisplayItem* out) {
             lastGroup = g;
             haveLastGroup = true;
         }
-        // Folded: the heading is still drawn (that is what you tap to unfold),
-        // its rows are not.
-        if (s_folded[(uint8_t)g]) continue;
         out[count].isHeader = false;
         out[count].group = g;
         out[count].row = rows[i];
@@ -371,9 +364,9 @@ static void computeGeom(TFT_eSPI& t, int screenH, int& top, int& bodyBottom,
     // fit above the BACK strip in landscape.
     rowH = t.fontHeight() + 10;
     const int big = t.fontHeight();
+    headerH = big + 6;
+    tallH   = big + big + 8;    // label and value both at size 2
     t.setTextSize(1);
-    headerH = t.fontHeight() + 6;
-    tallH   = t.fontHeight() + big + 7;
 }
 
 // Row height is decided in exactly one place, itemHeight() below, shared by
@@ -381,16 +374,22 @@ static void computeGeom(TFT_eSPI& t, int screenH, int& top, int& bodyBottom,
 // row above the one you pressed.
 
 void uiSettingsInit(TFT_eSPI& t) {
-    // Arriving at Settings is arriving at its main page, at the top, with
-    // nothing folded. Scroll memory is for moving BETWEEN pages inside one
+    // Arriving at Settings is arriving at its main page, at the top. Scroll memory is for moving BETWEEN pages inside one
     // visit -- carrying it across a fresh entry would drop you mid-list with
     // no idea why.
     s_page = SettingsPage::MAIN;
     for (uint8_t i = 0; i < 4; i++) g_scrollFor[i] = 0;
-    for (uint8_t i = 0; i < 6; i++) s_folded[i] = false;
     // Any pending question dies with the screen. Coming back to Settings and
     // finding a confirm panel still up from last time would be answering
     // something you no longer remember asking.
+    uiSettingsSetConfirm(SettingsRow::NONE);
+    t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
+}
+
+// Coming BACK from a screen Settings opened (TYPE FILTER, POWER SAVER, a
+// SYSTEM row...). Unlike uiSettingsInit() this keeps the page and its scroll,
+// so you land on the row you left instead of the top of the main list.
+void uiSettingsResume(TFT_eSPI& t) {
     uiSettingsSetConfirm(SettingsRow::NONE);
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
 }
@@ -450,12 +449,15 @@ static void settingsConfirmRects(int screenW, int screenH,
                                  int& px, int& py, int& pw, int& ph,
                                  int& okX, int& okY, int& okW, int& okH,
                                  int& cnX, int& cnY, int& cnW, int& cnH) {
-    pw = screenW - 40;
-    if (pw > 240) pw = 240;
-    ph = 128;
+    // Bigger where the text is (Theme::SMALL_TEXT): room for the two lines
+    // re-wrapped into up to four at size 2, and taller buttons.
+    const bool big = Theme::SMALL_TEXT > 1;
+    pw = screenW - (big ? 20 : 40);
+    if (pw > (big ? 300 : 240)) pw = big ? 300 : 240;
+    ph = big ? 184 : 128;
     px = (screenW - pw) / 2;
     py = (screenH - ph) / 2;
-    const int margin = 10, gap = 8, btnH = 24;
+    const int margin = 10, gap = 8, btnH = big ? 30 : 24;
     cnH = okH = btnH;
     cnY = py + ph - btnH - margin;
     cnX = px + margin;
@@ -497,14 +499,20 @@ static void drawSettingsConfirm(TFT_eSPI& t, int w, int h) {
     if (tw > pw - 16) tw = pw - 16;
     Theme::drawBangersText(t, px + (pw - tw) / 2, py + 8, ct->title, Theme::RED, Theme::BangersSize::MD);
 
-    t.setTextWrap(false);
-    t.setTextSize(1);
-    t.setTextColor(Theme::WHITE, Theme::BG);
-    const char* lines[2] = { ct->line1, ct->line2 };
-    for (uint8_t i = 0; i < 2; i++) {
-        int lw = t.textWidth(lines[i]);
-        t.setCursor(px + (pw - lw) / 2, py + 34 + i * 11);
-        t.print(lines[i]);
+    if (Theme::SMALL_TEXT > 1) {
+        char both[96];
+        snprintf(both, sizeof both, "%s %s", ct->line1, ct->line2);
+        Theme::drawWrapped(t, px + 8, py + 36, pw - 16, both, Theme::WHITE, Theme::BG, true);
+    } else {
+        t.setTextWrap(false);
+        t.setTextSize(1);
+        t.setTextColor(Theme::WHITE, Theme::BG);
+        const char* lines[2] = { ct->line1, ct->line2 };
+        for (uint8_t i = 0; i < 2; i++) {
+            int lw = t.textWidth(lines[i]);
+            t.setCursor(px + (pw - lw) / 2, py + 34 + i * 11);
+            t.print(lines[i]);
+        }
     }
 
     Theme::drawButton(t, okX, okY, okW, okH, ct->verb, false);
@@ -582,8 +590,10 @@ bool uiSettingsTapPinnedBack(TFT_eSPI& t, int x, int y, int screenW, int screenH
     return x >= bx && x < bx + bw && y >= by && y < by + bh;
 }
 
+// Size 2, same as the rows. At size 1 these were 8px tall letters squeezed
+// between the cards, too small to read on the 3.5" panel.
 static void drawHeader(TFT_eSPI& t, int w, int y, int hgt, RowGroupId g) {
-    t.setTextSize(1);
+    t.setTextSize(2);
     t.setTextColor(groupColor(g), Theme::BG);
     t.setCursor(8, y + (hgt - t.fontHeight()) / 2);
     t.print(groupName(g));
@@ -641,9 +651,9 @@ static void rowPanel(TFT_eSPI& t, int w, int y, int hgt) {
 static void drawTwoLineRow(TFT_eSPI& t, int w, int y, int hgt, const char* label,
                            const char* value, uint16_t labelColor, bool cycles) {
     rowPanel(t, w, y, hgt);
-    t.setTextSize(1);
+    t.setTextSize(2);
     t.setTextColor(labelColor, Theme::BG);
-    t.setCursor(8, y + 2);
+    t.setCursor(8, y + 3);
     t.print(label);
     const int lineY = y + 2 + t.fontHeight() + 1;
 
@@ -676,6 +686,14 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, const char* label,
     // backing below stays anyway: it costs nothing now and it is what keeps
     // text crisp if a row is ever drawn without a panel behind it.
     rowPanel(t, w, y, hgt);
+    // Compact only when this row's label and value would actually collide at
+    // size 2. Keying it on portrait alone dropped every row on the 320-wide
+    // JC3248 to size 1, though nearly all of them fit at size 2 there.
+    if (compact) {
+        t.setTextSize(2);
+        const int need = 8 + t.textWidth(label) + 12 + (value ? t.textWidth(value) : 0) + 18;
+        compact = need > w;
+    }
     t.setTextSize(compact ? 1 : 2);
     t.setTextColor(danger ? Theme::RED : labelColor, Theme::BG);
     t.setCursor(8, y + (hgt - t.fontHeight()) / 2);
@@ -747,8 +765,12 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             label = "LOCK BACKGROUND"; value = Settings::backgroundLocked() ? "ON" : "OFF";
             break;
         case SettingsRow::BRIGHTNESS:
-            label = "BRIGHT -  +";
-            snprintf(valBuf, valBufN, "%u%%", (unsigned)(Settings::brightness() * 100 / 255));
+            // A tap on the left half dims, the right half brightens (main.cpp),
+            // so the minus leads the label and the plus ends the value. It
+            // used to read "BRIGHT -  +", which drew the plus in the LEFT
+            // half: pressing it turned the screen down.
+            label = "- BRIGHT";
+            snprintf(valBuf, valBufN, "%u%% +", (unsigned)(Settings::brightness() * 100 / 255));
             value = valBuf;
             break;
         case SettingsRow::INVERT:
@@ -1009,37 +1031,6 @@ switch (Settings::background()) {
     // Over the top of everything, so the list is still visible around it and
     // it is obvious which screen you are being asked about.
     drawSettingsConfirm(t, w, h);
-}
-
-bool uiSettingsTapHeader(TFT_eSPI& t, int x, int y, int screenW, int screenH) {
-    (void)x; (void)screenW;
-    int top, bodyBottom, rowH, headerH, tallH;
-    computeGeom(t, screenH, top, bodyBottom, rowH, headerH, tallH);
-
-    DisplayItem items[LIST_MAX_N + 6];
-    uint8_t n = buildDisplayList(items);
-    // Same clamp the draw applies, so a tap can never be tested against a
-    // scroll position the screen is not actually showing.
-    { const int m = maxScroll(items, n, top, bodyBottom, rowH, headerH, tallH);
-      if (g_scroll > m) g_scroll = m; }
-
-    int cy = top;
-    int idx = g_scroll;
-    while (idx < n) {
-        int itemH = itemHeight(items[idx], rowH, headerH, tallH);
-        if (cy + itemH > bodyBottom) break;
-        if (y >= cy && y < cy + itemH && items[idx].isHeader) {
-            const uint8_t g = (uint8_t)items[idx].group;
-            s_folded[g] = !s_folded[g];
-            // Folding shortens the list under your finger; an old scroll
-            // offset would leave you staring at blank space below the end.
-            g_scroll = 0;
-            return true;
-        }
-        cy += itemH;
-        idx++;
-    }
-    return false;
 }
 
 SettingsRow uiSettingsHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH) {

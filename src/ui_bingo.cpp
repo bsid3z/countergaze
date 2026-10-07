@@ -18,7 +18,7 @@ int8_t  s_openCell = -1;      // the square whose paragraph is up, or -1
 // landscape wide and short, and the icon is sized from whichever is smaller.
 void geom(TFT_eSPI& t, int w, int h, int& gx, int& gy, int& cw, int& ch) {
     const Theme::ButtonBarGeom bar = Theme::computeButtonBar(w, h);
-    const int top    = TOP + 14;
+    const int top    = TOP + Theme::LIST_HEADING_H;
     const int bottom = bar.y - 6;
     const int pad    = 6, gap = 4;
     cw = (w - 2 * pad - 3 * gap) / 4;
@@ -71,7 +71,6 @@ void drawCard(TFT_eSPI& t, int w, int h) {
              (unsigned)Bingo::markedCount(), (unsigned)lines, lines == 1 ? "" : "S");
     Theme::drawListHeading(t, head, Bingo::markedCount() == Bingo::CELLS ? Theme::AMBER : Theme::CYAN);
 
-    t.setTextSize(1);
     for (uint8_t i = 0; i < Bingo::CELLS; i++) {
         const int x = gx + (i % 4) * (cw + 4);
         const int y = gy + (i / 4) * (ch + 4);
@@ -102,6 +101,7 @@ void drawCard(TFT_eSPI& t, int w, int h) {
         }
 
         const char* name = shortName(type);
+        Theme::setSmallText(t, name, cw - 4);
         t.setTextColor(line ? Theme::AMBER : (got ? Theme::GREEN : Theme::W95_LIGHT), Theme::BG);
         int tw = t.textWidth(name);
         if (tw > cw - 4) tw = cw - 4;
@@ -110,6 +110,7 @@ void drawCard(TFT_eSPI& t, int w, int h) {
 
         if (got) {
             const char* d = dayName(Bingo::markDay(i));
+            Theme::setSmallText(t, d, cw / 2);
             t.setTextColor(Theme::W95_SHADOW, Theme::BG);
             t.setCursor(x + cw - t.textWidth(d) - 2, y + 2);
             t.print(d);
@@ -120,8 +121,8 @@ void drawCard(TFT_eSPI& t, int w, int h) {
 void drawStats(TFT_eSPI& t, int w, int h) {
     Theme::drawListHeading(t, "BINGO STATS", Theme::VAPOR_PINK);
     const Theme::ButtonBarGeom bar = Theme::computeButtonBar(w, h);
-    t.setTextSize(1);
-    int y = TOP + 18;
+    t.setTextSize(Theme::SMALL_TEXT);
+    int y = TOP + Theme::LIST_HEADING_H + 4;
     const int lineH = t.fontHeight() + 6;
 
     struct Row { const char* k; char v[24]; } rows[6];
@@ -143,9 +144,9 @@ void drawStats(TFT_eSPI& t, int w, int h) {
         y += lineH;
     }
 
-    t.setTextColor(Theme::W95_LIGHT, Theme::BG);
-    t.setCursor(10, y + 4);
-    t.print(Bingo::weekNumber() ? "A fresh card every week." : "No clock yet: this card stands.");
+    Theme::drawWrapped(t, 10, y + 4, w - 20,
+                       Bingo::weekNumber() ? "A fresh card every week." : "No clock yet: this card stands.",
+                       Theme::W95_LIGHT, Theme::BG);
 }
 
 // The "are you sure" panel behind NEW. A week's marks are the whole game, and
@@ -155,14 +156,17 @@ void drawStats(TFT_eSPI& t, int w, int h) {
 void confirmRects(int screenW, int screenH, int& px, int& py, int& pw, int& ph,
                   int& yesX, int& yesY, int& yesW, int& yesH,
                   int& noX,  int& noY,  int& noW,  int& noH) {
-    pw = screenW - 40;
-    if (pw > 240) pw = 240;
+    // Bigger where the text is size 2 (Theme::SMALL_TEXT): the warning wraps
+    // to four lines there and the buttons carry size-2 labels.
+    const bool big = Theme::SMALL_TEXT > 1;
+    pw = screenW - (big ? 20 : 40);
+    if (pw > (big ? 300 : 240)) pw = big ? 300 : 240;
     // Tall enough for three wrapped lines above the buttons: at 132 the last
     // line of the warning ran under DEAL A NEW ONE.
-    ph = 164;
+    ph = big ? 224 : 164;
     px = (screenW - pw) / 2;
     py = (screenH - ph) / 2;
-    const int margin = 10, gap = 8, btnH = 24;
+    const int margin = 10, gap = 8, btnH = big ? 30 : 24;
     noY  = py + ph - btnH - margin;
     noH  = btnH;
     noX  = px + margin;
@@ -180,9 +184,9 @@ void drawConfirm(TFT_eSPI& t, int w, int h) {
     t.drawRoundRect(px, py, pw, ph, 6, Theme::PURPLE);
 
     t.setTextWrap(false);
-    t.setTextSize(1);
-    t.setTextColor(Theme::CYAN, Theme::BG);
     const char* q = "THROW THIS CARD AWAY?";
+    Theme::setSmallText(t, q, pw - 16);
+    t.setTextColor(Theme::CYAN, Theme::BG);
     t.setCursor(px + (pw - t.textWidth(q)) / 2, py + 8);
     t.print(q);
 
@@ -191,8 +195,18 @@ void drawConfirm(TFT_eSPI& t, int w, int h) {
     int lw = Theme::bangersTextWidth(marked, Theme::BangersSize::MD);
     const int maxLw = pw - 16;
     if (lw > maxLw) lw = maxLw;
-    Theme::drawBangersText(t, px + (pw - lw) / 2, py + 26, marked, Theme::RED, Theme::BangersSize::MD);
+    const int bigOff = Theme::SMALL_TEXT > 1 ? 8 : 0;   // under a size-2 question
+    Theme::drawBangersText(t, px + (pw - lw) / 2, py + 26 + bigOff, marked, Theme::RED, Theme::BangersSize::MD);
 
+    if (Theme::SMALL_TEXT > 1) {
+        Theme::drawWrapped(t, px + 8, py + 58 + bigOff, pw - 16,
+                           "A new card loses them, and the streak with them. Lines already called are kept.",
+                           Theme::W95_LIGHT, Theme::BG, true);
+        Theme::drawButton(t, yesX, yesY, yesW, yesH, "DEAL A NEW ONE", false);
+        Theme::drawButton(t, noX,  noY,  noW,  noH,  "KEEP THIS ONE",  false);
+        return;
+    }
+    t.setTextSize(1);
     t.setTextColor(Theme::W95_LIGHT, Theme::BG);
     char lines[3][48];
     const uint8_t n = Theme::wrapText(t, "A new card loses them, and the streak with them. Lines already called are kept.",

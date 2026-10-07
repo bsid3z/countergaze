@@ -33,7 +33,7 @@ void sayFocus(const char* l, uint32_t now) { s_line = l; s_lineUntil = now + 600
 Detection s_alert       = {};
 uint32_t  s_alertAt     = 0;
 bool      s_alertOn     = false;   // rather than testing s_alertAt, which can be 0
-int       s_cardX = 0, s_cardY = 0, s_cardW = 98;
+int       s_cardX = 0, s_cardY = 0, s_cardW = 98, s_cardH = 40;
 constexpr int      CARD_W = 98, CARD_H = 40;
 constexpr uint32_t CARD_MS = 9000;
 constexpr uint32_t FOCUS_MS = 25u * 60u * 1000u;
@@ -149,7 +149,7 @@ bool uiDeskAlertUp(uint32_t now) { return s_alertOn && now - s_alertAt < CARD_MS
 const Detection* uiDeskAlertDetection() { return &s_alert; }
 bool uiDeskHitAlert(int x, int y, uint32_t now) {
     return uiDeskAlertUp(now) && x >= s_cardX - 4 && x <= s_cardX + s_cardW + 4 &&
-           y >= s_cardY - 4 && y <= s_cardY + CARD_H + 4;
+           y >= s_cardY - 4 && y <= s_cardY + s_cardH + 4;
 }
 
 
@@ -342,17 +342,23 @@ static void drawAlertCard(TFT_eSPI& t, int barY, uint32_t now, bool compact, int
     // Bottom left, just above the buttons: out of the way of his bubble,
     // which lives at the top over the clock. He is the one thing on this
     // screen that can stand being partly covered for nine seconds.
-    s_cardW = compact ? 72 : CARD_W;
+    // The full card's three lines are size 2 on the 3.5" panel
+    // (Theme::SMALL_TEXT), and the card grows to hold them. The compact one
+    // beside the clock's plate has no room to and stays as it was.
+    const bool big = Theme::SMALL_TEXT > 1 && !compact;
+    s_cardW = compact ? 72 : (big ? 172 : CARD_W);
+    s_cardH = big ? 60 : CARD_H;
     s_cardX = compact ? t.width() - s_cardW - 4 : leftX;
-    s_cardY = compact ? 18 : barY - CARD_H - 4;
+    s_cardY = compact ? 18 : barY - s_cardH - 4;
     const int x = s_cardX, y = s_cardY;
-    const int cw = s_cardW;
+    const int cw = s_cardW, CARD_H = s_cardH;
     // The border blinks for the first two seconds, then holds.
     const bool lit = (now - s_alertAt > 2000) || ((now / 250) & 1);
     t.fillRoundRect(x, y, cw, CARD_H, 4, Theme::BG);
     t.drawRoundRect(x, y, cw, CARD_H, 4, lit ? c : Theme::W95_SHADOW);
     Theme::drawTypeIcon(t, d.type, x + (compact ? 10 : 12), y + CARD_H / 2, compact ? 7 : 8);
-    t.setTextSize(1);
+    t.setTextSize(big ? 2 : 1);
+    const int lh = big ? 18 : 11;
     // The three lines sit against the card's right edge, so whatever their
     // length the icon on the left keeps its own room; the caps below keep
     // the longest line clear of it. Seven characters on the compact card,
@@ -369,10 +375,11 @@ static void drawAlertCard(TFT_eSPI& t, int barY, uint32_t now, bool compact, int
     // The device's own name where it has one, else the vendor; what fits.
     char who[13];
     snprintf(who, sizeof who, compact ? "%.7s" : "%.11s", d.name[0] ? d.name : vendorText(d));
-    printRight(who, y + 15, Theme::WHITE);
+    printRight(who, y + 4 + lh, Theme::WHITE);
     char sig[16];
     snprintf(sig, sizeof sig, "%d dBm", d.rssi);
-    printRight(sig, y + 26, Theme::CYAN);
+    printRight(sig, y + 4 + 2 * lh, Theme::CYAN);
+    t.setTextSize(1);
 }
 
 void uiDeskTapTimer(uint32_t now) {

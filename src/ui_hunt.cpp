@@ -131,11 +131,12 @@ void uiHuntTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     const int sqH = 44;
     Squachy::tick(t, w / 2, bodyTop, sqH, now, true, 0.6f, true);
 
-    t.setTextSize(1);
     t.setTextWrap(false);
-    t.setTextColor(Theme::CYAN, Theme::BG);
     int labelY = bodyTop + sqH + 2;
     const char* label = eng.huntLabel();
+    Theme::setSmallText(t, label, w - 16);
+    const int labelH = t.fontHeight();
+    t.setTextColor(Theme::CYAN, Theme::BG);
     int lw = t.textWidth(label);
     int maxLw = w - 16;
     t.setCursor((w - (lw < maxLw ? lw : maxLw)) / 2, labelY);
@@ -158,8 +159,10 @@ void uiHuntTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         Squachy::huntReaction(Squachy::HuntMoment::STALLED);
     }
 
-    int textBlockH = 36;
-    int gaugeTop = labelY + 12;
+    // Readout and trend line under the gauge; the trend is size 2 on the
+    // 3.5" panel (Theme::SMALL_TEXT), so the block is taller there.
+    int textBlockH = Theme::SMALL_TEXT > 1 ? 46 : 36;
+    int gaugeTop = labelY + labelH + 4;
     int gaugeBottom = bodyBottom - textBlockH;
     int r = gaugeBottom - gaugeTop;
     int maxRw = (w - 40) / 2;
@@ -248,7 +251,7 @@ void uiHuntTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         trend = rbuf;
         trendColor = Theme::GREEN;
     }
-    t.setTextSize(1);
+    Theme::setSmallText(t, trend, w - 16);
     int tw = t.textWidth(trend);
     t.setTextColor(trendColor, Theme::BG);
     t.setCursor((w - tw) / 2, cy + 8 + readoutH + 2);

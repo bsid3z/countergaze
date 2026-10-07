@@ -37,7 +37,10 @@ Rect     s_forget = { 0, 0, 0, 0 }, s_hunt = { 0, 0, 0, 0 };
 Rect     s_rows[ROWS_MAX];
 uint8_t  s_rowN = 0;
 
-const int BW = 68, BH = 26;
+// Theme::SMALL_TEXT 2 on the 3.5" panel: BACK wide enough for its label at
+// that size, and the inbox rows tall enough for three size-2 lines.
+const bool BIG = Theme::SMALL_TEXT > 1;
+const int BW = BIG ? 104 : 68, BH = BIG ? 30 : 26;
 const float SCALE = 1.5f;
 
 const char* memberName(const SquachMesh::Peer& p) {
@@ -140,9 +143,9 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     } else {
         snprintf(cnt, sizeof cnt, "%u IN RANGE", (unsigned)s_n);
     }
-    t.setTextSize(1);
+    Theme::setSmallText(t, cnt, w - 88);
     t.setTextColor(Theme::CYAN, Theme::BG);
-    t.setCursor(80, 12);
+    t.setCursor(80, 6 + (16 - t.fontHeight()) / 2 + 2);
     t.print(cnt);
 
     // ---- the carousel ---------------------------------------------------
@@ -151,9 +154,11 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     const int baseY = 146;
     s_prev = s_next = s_invite = s_add = s_forget = s_hunt = { 0, 0, 0, 0 };
     if (s_n == 0) {
+        const char* e1 = s_roster ? "Nobody in your squad" : "Nobody in range";
+        Theme::setSmallText(t, e1, colW - 8);
         t.setTextColor(Theme::W95_LIGHT, Theme::BG);
-        centred(t, s_roster ? "Nobody in your squad" : "Nobody in range", cx, 84);
-        centred(t, s_roster ? "yet. ADD one nearby." : "right now.", cx, 96);
+        centred(t, e1, cx, 84);
+        centred(t, s_roster ? "yet. ADD one nearby." : "right now.", cx, 88 + t.fontHeight());
     } else {
         const Mesh::SquadMember& m = s_members[s_sel];
         Squachy::setOutfitPreview((int8_t)m.peer.outfit);
@@ -165,8 +170,6 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         t.setTextSize(2);
         t.setTextColor(Theme::WHITE, Theme::BG);
         centred(t, memberName(m.peer), cx, baseY + 4);
-        t.setTextSize(1);
-        t.setTextColor(Theme::CYAN, Theme::BG);
         char sub[40];
         if (s_roster)
             snprintf(sub, sizeof sub, "%s  MET %ux  %u/%u", Squachy::outfitNameAt(m.peer.outfit),
@@ -174,6 +177,8 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         else
             snprintf(sub, sizeof sub, "%s  %u/%u", Squachy::outfitNameAt(m.peer.outfit),
                      (unsigned)(s_sel + 1), (unsigned)s_n);
+        Theme::setSmallText(t, sub, colW - 8);
+        t.setTextColor(Theme::CYAN, Theme::BG);
         centred(t, sub, cx, baseY + 22);
 
         if (s_n > 1) {
@@ -190,10 +195,18 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         const bool vis  = visiting(m.mac);
         const bool here = !s_roster || s_here[s_sel];
         const bool hunt = eng.isHunted(m.mac, true);
-        const int  by   = baseY + 34;
-        s_invite = { (int16_t)(cx - 88), (int16_t)by, 56, 22 };
-        s_hunt   = { (int16_t)(cx - 28), (int16_t)by, 56, 22 };
-        s_add    = { (int16_t)(cx + 32), (int16_t)by, 56, 22 };
+        const int  by   = baseY + (BIG ? 40 : 34);
+        // 100 wide where the column is a whole 320px portrait screen, so
+        // "VISITING" and "HUNTING" fit at size 2; 56 everywhere else.
+        if (BIG && colW >= 316) {
+            s_invite = { (int16_t)(cx - 154), (int16_t)by, 100, 28 };
+            s_hunt   = { (int16_t)(cx - 50),  (int16_t)by, 100, 28 };
+            s_add    = { (int16_t)(cx + 54),  (int16_t)by, 100, 28 };
+        } else {
+            s_invite = { (int16_t)(cx - 88), (int16_t)by, 56, 22 };
+            s_hunt   = { (int16_t)(cx - 28), (int16_t)by, 56, 22 };
+            s_add    = { (int16_t)(cx + 32), (int16_t)by, 56, 22 };
+        }
         Theme::drawButton(t, s_invite.x, s_invite.y, s_invite.w, s_invite.h,
                           !here ? "AWAY" : vis ? "VISITING" : "INVITE", vis || !here);
         if (!here) s_invite = { 0, 0, 0, 0 };
@@ -217,28 +230,32 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
 
     // ---- the inbox ------------------------------------------------------
     const int ix = port ? 4 : colW + 2;
-    const int iy = port ? baseY + 62 : 28;
+    const int iy = port ? baseY + (BIG ? 74 : 62) : 28;
     const int iw = port ? w - 8 : w - colW - 6;
     const int ih = (h - BH - 12) - iy;
     t.fillRect(ix, iy, iw, ih, Theme::BG);
     t.drawRect(ix, iy, iw, ih, Theme::PURPLE);
+    t.setTextSize(Theme::SMALL_TEXT);
+    const int lh = t.fontHeight() + 1;     // 9 at size 1, 17 at size 2
+    const int head = lh + 5;               // 14 at size 1
+    const uint8_t msgLines = BIG ? 3 : 2;
     t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
     t.setCursor(ix + 4, iy + 3);
     t.print("INBOX");
 
     const uint8_t have = MeshTalk::inboxCount();
-    const int rowH = 32;
-    uint8_t rows = (uint8_t)((ih - 14) / rowH);
+    const int rowH = BIG ? 2 + lh * (1 + msgLines) + 2 : 32;
+    uint8_t rows = (uint8_t)((ih - head) / rowH);
     if (rows > ROWS_MAX) rows = ROWS_MAX;
     s_rowN = 0;
     if (!have) {
         t.setTextColor(Theme::W95_SHADOW, Theme::BG);
-        t.setCursor(ix + 4, iy + 18);
+        t.setCursor(ix + 4, iy + head + 4);
         t.print("No messages yet.");
     }
     for (uint8_t i = 0; i < have && i < rows; i++) {
         const MeshTalk::Message& msg = MeshTalk::inboxAt(i);
-        const int y = iy + 14 + i * rowH;
+        const int y = iy + head + i * rowH;
         s_rows[s_rowN++] = { (int16_t)ix, (int16_t)y, (int16_t)iw, (int16_t)(rowH - 2) };
         if (i) t.drawFastHLine(ix + 3, y - 2, iw - 6, Theme::W95_SHADOW);
         // Who, and how long ago -- red, as every real message is drawn.
@@ -252,13 +269,13 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         else           snprintf(ago, sizeof ago, "%lum", (unsigned long)(mins > 999 ? 999 : mins));
         t.setCursor(ix + iw - 4 - t.textWidth(ago), y);
         t.print(ago);
-        char lines[2][48];
+        char lines[3][48];
         int maxW = iw - 8;
         if (maxW > 47 * t.textWidth("M")) maxW = 47 * t.textWidth("M");
-        const uint8_t n = Theme::wrapText(t, MeshTalk::lineText(msg), maxW, lines, 2);
+        const uint8_t n = Theme::wrapText(t, MeshTalk::lineText(msg), maxW, lines, msgLines);
         t.setTextColor(Theme::WHITE, Theme::BG);
         for (uint8_t k = 0; k < n; k++) {
-            t.setCursor(ix + 4, y + 10 + k * 9);
+            t.setCursor(ix + 4, y + lh + 1 + k * lh);
             t.print(lines[k]);
         }
     }

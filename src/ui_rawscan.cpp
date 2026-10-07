@@ -86,15 +86,17 @@ static void confirmRects(int screenW, int screenH,
                           int& huX, int& huY, int& huW, int& huH,
                           int& igX, int& igY, int& igW, int& igH,
                           int& cnX, int& cnY, int& cnW, int& cnH) {
-    pw = screenW - 40;
-    if (pw > 240) pw = 240;
+    // Wider on the 3.5" panel so "STOP HUNT" fits its button at size 2.
+    const bool big = Theme::SMALL_TEXT > 1;
+    pw = screenW - (big ? 20 : 40);
+    if (pw > (big ? 300 : 240)) pw = big ? 300 : 240;
     // Two rows of two rather than one row of four. A fourth button in the
     // single row would be ~40px wide on the narrowest portrait rotation,
     // which is below a reliable finger target.
-    ph = 124;
+    ph = big ? 136 : 124;
     px = (screenW - pw) / 2;
     py = (screenH - ph) / 2;
-    const int margin = 10, gap = 10, btnH = 26;
+    const int margin = 10, gap = 10, btnH = big ? 30 : 26;
     int btnW = (pw - 2 * margin - gap) / 2;
     igY = cnY = py + ph - btnH - margin;
     igH = cnH = btnH;
@@ -128,19 +130,21 @@ static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool 
     t.fillRoundRect(px, py, pw, ph, 6, Theme::BG);
     t.drawRoundRect(px, py, pw, ph, 6, Theme::PURPLE);
 
-    t.setTextSize(1);
     t.setTextWrap(false);
-    t.setTextColor(Theme::CYAN, Theme::BG);
     const char* q = "TRACK THIS TARGET?";
+    Theme::setSmallText(t, q, pw - 16);
+    t.setTextColor(Theme::CYAN, Theme::BG);
     int qw = t.textWidth(q);
     t.setCursor(px + (pw - qw) / 2, py + 8);
     t.print(q);
 
+    const int labelY = py + 12 + t.fontHeight();   // under the question, at its size
+    Theme::setSmallText(t, label, pw - 16);
     t.setTextColor(Theme::WHITE, Theme::BG);
     int lw = t.textWidth(label);
     int maxLw = pw - 16;
     int lx = px + (pw - (lw < maxLw ? lw : maxLw)) / 2;
-    t.setCursor(lx, py + 24);
+    t.setCursor(lx, labelY);
     t.print(label);
 
     // Toggling, so the button names the next tap: "WATCH" on something
@@ -170,7 +174,10 @@ static void rowLayout(TFT_eSPI& t, int w, int h, int& bodyTop, int& bodyBottom, 
     // correctly reads back whatever font+size is currently active.
     t.setTextSize(2);
     int nameH = t.fontHeight();
-    t.setTextSize(1);
+    // The detail line is a MAC or "CHn  LOCKED" from x=4, nothing else on
+    // it: 208px at size 2, so Theme::SMALL_TEXT fits on every rotation of
+    // the 3.5" panel.
+    t.setTextSize(Theme::SMALL_TEXT);
     int detailH = t.fontHeight();
     rowH = 1 /* topPad */ + nameH + detailH + 2;
 }
@@ -289,7 +296,7 @@ switch (Settings::background()) {
         if (isBle) {
             char sub[24];
             snprintf(sub, sizeof(sub), "%u found so far", (unsigned)eng.rawBleCount());
-            t.setTextSize(1);
+            Theme::setSmallText(t, sub, w - 16);
             t.setTextColor(Theme::CYAN, Theme::BG);
             int sw = t.textWidth(sub);
             t.setCursor((w - sw) / 2, bodyTop + bodyH / 3 + 35);
@@ -342,7 +349,7 @@ switch (Settings::background()) {
             t.setCursor(4, y + topPad);
             t.print(r->name[0] ? r->name : "(unnamed)");
 
-            t.setTextSize(1);
+            t.setTextSize(Theme::SMALL_TEXT);
             t.setTextColor(Theme::WHITE, Theme::BG);
             char mac[24];
             snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
@@ -368,7 +375,7 @@ switch (Settings::background()) {
             t.setCursor(4, y + topPad);
             t.print(eng.rawWifiSsid(idx));
 
-            t.setTextSize(1);
+            t.setTextSize(Theme::SMALL_TEXT);
             t.setTextColor(Theme::WHITE, Theme::BG);
             char line[24];
             snprintf(line, sizeof(line), "CH%u  %s", (unsigned)eng.rawWifiChannel(idx),

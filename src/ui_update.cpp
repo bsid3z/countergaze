@@ -83,15 +83,20 @@ bool in(int x, int y, int bx, int by, int bw, int bh) {
     return x >= bx - SLOP && x <= bx + bw + SLOP && y >= by - SLOP && y <= by + bh + SLOP;
 }
 
-int lineH(TFT_eSPI& t) { return t.fontHeight() + 2; }
+// Every line on this screen is Theme::SMALL_TEXT where it fits the width and
+// size 1 where it does not, so the line pitch is fixed at the bigger size:
+// a line that fell back to size 1 just gets a little more air.
+int lineH(TFT_eSPI& t) { (void)t; return 8 * Theme::SMALL_TEXT + 2; }
 
 void label(TFT_eSPI& t, int y, uint16_t c, const char* s) {
+    Theme::setSmallText(t, s, t.width() - 16);
     t.setTextColor(c, Theme::BG);
     t.setCursor(8, y);
     t.print(s);
 }
 
 void centred(TFT_eSPI& t, int y, uint16_t c, const char* s) {
+    Theme::setSmallText(t, s, t.width() - 16);
     t.setTextColor(c, Theme::BG);
     t.setCursor((t.width() - t.textWidth(s)) / 2, y);
     t.print(s);
@@ -99,6 +104,7 @@ void centred(TFT_eSPI& t, int y, uint16_t c, const char* s) {
 
 // Wrapped paragraph, left-aligned. Returns the y below it.
 int para(TFT_eSPI& t, int y, uint16_t c, const char* s) {
+    t.setTextSize(Theme::SMALL_TEXT);
     const int charW = t.textWidth("M");
     int maxW = t.width() - 16;
     if (maxW > 47 * charW) maxW = 47 * charW;
@@ -114,6 +120,8 @@ int para(TFT_eSPI& t, int y, uint16_t c, const char* s) {
 }
 
 void pair(TFT_eSPI& t, int y, const char* k, const char* v) {
+    t.setTextSize(Theme::SMALL_TEXT);
+    if (8 + t.textWidth("OTHER SLOT ") + 4 + t.textWidth(v) > t.width() - 8) t.setTextSize(1);
     t.setTextColor(Theme::CYAN, Theme::BG);
     t.setCursor(8, y);
     t.print(k);
@@ -168,6 +176,7 @@ void drawSwitchPanel(TFT_eSPI& t) {
     char head[40];
     snprintf(head, sizeof head, "SWITCH TO %.20s?", OtaCore::otherVersion() ? OtaCore::otherVersion() : "");
     int y = p.y + 10;
+    Theme::setSmallText(t, head, p.w - 12);
     t.setTextColor(Theme::AMBER, Theme::BG);
     t.setCursor(p.x + (p.w - t.textWidth(head)) / 2, y);
     t.print(head);
@@ -175,6 +184,7 @@ void drawSwitchPanel(TFT_eSPI& t) {
     const char* l1 = "Restarts into the other version.";
     const char* l2 = "Your settings stay.";
     t.setTextColor(Theme::WHITE, Theme::BG);
+    Theme::setSmallText(t, l1, p.w - 12);
     t.setCursor(p.x + (p.w - t.textWidth(l1)) / 2, y); t.print(l1);
     y += lineH(t);
     t.setCursor(p.x + (p.w - t.textWidth(l2)) / 2, y); t.print(l2);
@@ -200,6 +210,7 @@ int progressLive(TFT_eSPI& t, uint32_t got, uint32_t total, uint8_t pct) {
     const int left = n < FIELD ? (FIELD - n) / 2 : 0;
     snprintf(padded, sizeof padded, "%*s%s%*s", left, "", b, FIELD - n - left > 0 ? FIELD - n - left : 0, "");
     t.setTextColor(Theme::WHITE, Theme::BG);
+    Theme::setSmallText(t, padded, t.width() - 8);
     t.setCursor((t.width() - FIELD * t.textWidth("M")) / 2, y);
     t.print(padded);
     return y;
@@ -238,7 +249,12 @@ void drawBtWaiting(TFT_eSPI& t, bool connected) {
     y += lineH(t) + 4;
     label(t, y, Theme::WHITE, "On a computer or Android phone,");
     y += lineH(t);
-    label(t, y, Theme::WHITE, "open");
+    // Sized on the whole line, not on "open" alone, so the address cannot
+    // run off the right edge.
+    Theme::setSmallText(t, "open squachwatch.com/update", t.width() - 16);
+    t.setTextColor(Theme::WHITE, Theme::BG);
+    t.setCursor(8, y);
+    t.print("open");
     t.setTextColor(Theme::CYAN, Theme::BG);
     t.print(" squachwatch.com/update");
     y += lineH(t);
@@ -316,6 +332,7 @@ void drawPick(TFT_eSPI& t) {
     for (int i = 0; i < n; i++) {
         const OtaWifi::Net* net = OtaWifi::net((uint8_t)i);
         const int y = ROW_Y0 + i * (ROW_H + ROW_GAP);
+        t.setTextSize(Theme::SMALL_TEXT);
         t.fillRect(8, y, w - 16, ROW_H, Theme::TASKBAR);
         t.drawRect(8, y, w - 16, ROW_H, Theme::VAPOR_PURPLE);
         const bool saved = OtaWifi::savedIndexOf(net->ssid) >= 0;
@@ -405,7 +422,7 @@ void uiUpdateAskSwitch(bool ask) { s_askSwitch = ask; }
 void uiUpdateTick(TFT_eSPI& t, uint32_t now, bool full) {
     (void)now;
     if (!full) {
-        t.setTextSize(1);
+        t.setTextSize(Theme::SMALL_TEXT);
         t.setTextWrap(false);
         if (OtaWifi::state() == OtaWifi::State::DOWNLOADING)
             progressLive(t, OtaWifi::bytesReceived(), OtaWifi::bytesExpected(), OtaWifi::percent());
@@ -415,7 +432,7 @@ void uiUpdateTick(TFT_eSPI& t, uint32_t now, bool full) {
     }
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
     Theme::drawTitleBar(t, ">> UPDATE FIRMWARE <<");
-    t.setTextSize(1);
+    t.setTextSize(Theme::SMALL_TEXT);
     t.setTextWrap(false);
 
     const bool wifiOn = OtaWifi::state() != OtaWifi::State::OFF;

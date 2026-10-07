@@ -63,7 +63,8 @@ void uiOutfitTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     char buf[24];
     snprintf(buf, sizeof(buf), "%u / %u unlocked",
              (unsigned)Squachy::unlockedOutfitCount(), (unsigned)Squachy::outfitCount());
-    t.setTextSize(1);
+    // Between the arrows, which take ARROW_ZONE_W at each side.
+    Theme::setSmallText(t, buf, w - 2 * ARROW_ZONE_W);
     t.setTextColor(Theme::CYAN, Theme::BG);
     int bw = t.textWidth(buf);
     t.setCursor((w - bw) / 2, footerTop + 22);

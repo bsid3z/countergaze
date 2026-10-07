@@ -140,11 +140,9 @@ void uiLightTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // real and travel with the owner's preferences -- but it says so, in the
     // space under the last row, rather than letting somebody tap TEST and
     // wonder what they missed.
-    if (!StatusLight::available() && y + 12 <= bodyBottom) {
-        t.setTextSize(1);
-        t.setTextColor(Theme::blend(Theme::BG, Theme::WHITE, 150), Theme::BG);
-        t.setCursor(8, y + 4);
-        t.print("No LED known on this board yet.");
+    if (!StatusLight::available() && y + 24 <= bodyBottom) {
+        Theme::drawWrapped(t, 8, y + 4, w - 24, "No LED known on this board yet.",
+                           Theme::blend(Theme::BG, Theme::WHITE, 150), Theme::BG);
     }
 
     Theme::drawScrollbar(t, w - 4, top, bodyBottom - top, n, visibleCount, g_scroll);

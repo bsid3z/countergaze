@@ -188,7 +188,7 @@ void reset() {
 // size 1 with a hard edge and no tail curve -- it should read as an
 // interruption, not as the device speaking.
 static void bubble(TFT_eSPI& t, int x, int y, int screenW, const char* s) {
-    t.setTextSize(1);
+    t.setTextSize(Theme::SMALL_TEXT);   // size 2 on the 3.5" panel
     const int w = t.textWidth(s) + 8;
     const int h = t.fontHeight() + 5;
     if (x + w > screenW - 2) x = screenW - 2 - w;
@@ -286,7 +286,7 @@ static void yetiTick(TFT_eSPI& t, uint32_t now, int screenW, int cx, int halfW, 
     const bool talking = (s_yPhase == YPhase::TALK) ||
                          (s_yPhase == YPhase::NAP && now - s_yAt < 1800u);
     if (talking && s_yLine) {
-        t.setTextSize(1);
+        t.setTextSize(Theme::SMALL_TEXT);
         const int bw = t.textWidth(s_yLine) + 8;
         int bx = (int)s_yX + Theme::YETI_W / 2 - bw / 2;
         int by = baseY - Theme::YETI_H - 16;
@@ -485,7 +485,7 @@ void tick(TFT_eSPI& t, uint32_t now, int screenW, int bandTop, int bandBottom) {
     // which is where the whole joke went the first time. Level with him, and
     // on whichever side has the room.
     if (s_phase == Phase::PERCH || s_phase == Phase::HECKLE) {
-        t.setTextSize(1);
+        t.setTextSize(Theme::SMALL_TEXT);
         const int bw = t.textWidth(QUIPS[s_quip]) + 8;
         const int bx = ((int)s_x + SPR + 4 + bw <= screenW - 2)
                        ? (int)s_x + SPR + 4

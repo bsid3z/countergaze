@@ -32,11 +32,12 @@ static void computeGeom(int w, int h,
     squachyBaseY = 50;
     captionTop = squachyBaseY + 14;
     captionMaxW = w - 24;
-    wordsTop  = captionTop + CAPTION_MAX_LINES * 10 + 4;
+    // Line pitch of the caption at Theme::SMALL_TEXT, same as the draw.
+    wordsTop  = captionTop + CAPTION_MAX_LINES * (8 * Theme::SMALL_TEXT + 2) + 4;
     wordRowH  = 24;
 
     int btnY = wordsTop + wordRowH * 3 + 6;
-    int btnH = 20;
+    int btnH = Theme::SMALL_TEXT > 1 ? 26 : 20;   // room for a size-2 label
     const int margin = 12, gap = 8;
     int btnW = (w - 2 * margin - gap) / 2;
     invX = margin;           invY = btnY; invW = btnW; invH = btnH;
@@ -71,7 +72,7 @@ void uiColorCheckTick(TFT_eSPI& t, uint32_t now) {
     // wrapped block below him instead, with a real line budget.
     Squachy::drawWaving(t, w / 2, squachyBaseY, now, squachyScale, nullptr);
 
-    t.setTextSize(1);
+    t.setTextSize(Theme::SMALL_TEXT);
     t.setTextWrap(false);
     t.setTextColor(Theme::WHITE, Theme::BG);
     char capLines[CAPTION_MAX_LINES][48];
@@ -81,7 +82,7 @@ void uiColorCheckTick(TFT_eSPI& t, uint32_t now) {
         int lw = t.textWidth(capLines[i]);
         t.setCursor((w - lw) / 2, cy);
         t.print(capLines[i]);
-        cy += 10;
+        cy += 8 * Theme::SMALL_TEXT + 2;
     }
 
     t.setTextSize(3);

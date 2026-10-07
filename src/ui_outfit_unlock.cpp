@@ -257,7 +257,7 @@ void uiOutfitUnlockTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // Blinks, so it reads as a prompt rather than a label.
     if (((now / 500) % 2) == 0) {
         const char* hint = "TAP TO CONTINUE";
-        t.setTextSize(1);
+        Theme::setSmallText(t, hint, w - 16);
         t.setTextColor(Theme::CYAN);
         int hw = t.textWidth(hint);
         t.setCursor((w - hw) / 2, footerTop + 22);

@@ -31,12 +31,27 @@ uint8_t  s_tallyN  = 0;
 
 struct Geom { int shareY, shareH, sendX, sendY, sendW; };
 
+// On the 3.5" panel (Theme::SMALL_TEXT 2) the text is wrapped paragraphs at
+// size 2, and the SHARE WIFI row sits under however many lines the intro
+// took; on the CYD it is the three fixed size-1 lines it always was.
+const bool BIG = Theme::SMALL_TEXT > 1;
+void introText(char* buf, size_t n) {
+    snprintf(buf, n, "Tells every SquachWatch in range with your phrase to update to %s, "
+                     "the version this one runs.", OtaCore::runningVersion());
+}
+
 Geom geom(TFT_eSPI& t) {
     Geom g;
     t.setTextSize(2);
     g.shareH = t.fontHeight() + 10;
     t.setTextSize(1);
     g.shareY = Theme::LIST_TOP + Theme::LIST_HEADING_H + 4 + 12 * 3 + 6;
+    if (BIG) {
+        char intro[128];
+        introText(intro, sizeof intro);
+        g.shareY = Theme::LIST_TOP + Theme::LIST_HEADING_H + 4 + 6 +
+                   Theme::drawWrapped(t, 8, 0, t.width() - 16, intro, Theme::WHITE, Theme::BG, false, false);
+    }
     g.sendW  = 150;
     g.sendX  = (t.width() - g.sendW) / 2;
     g.sendY  = t.height() - Theme::PINNED_BACK_H - BTN_H - 8;
@@ -123,12 +138,18 @@ void uiSquadUpdateTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     char buf[48];
 
     if (!s_sent) {
-        line(t, y, Theme::WHITE, "Tells every SquachWatch in range with");
-        y += 12;
-        snprintf(buf, sizeof buf, "your phrase to update to %s,", OtaCore::runningVersion());
-        line(t, y, Theme::WHITE, buf);
-        y += 12;
-        line(t, y, Theme::WHITE, "the version this one runs.");
+        if (BIG) {
+            char intro[128];
+            introText(intro, sizeof intro);
+            Theme::drawWrapped(t, 8, y, w - 16, intro, Theme::WHITE, Theme::BG);
+        } else {
+            line(t, y, Theme::WHITE, "Tells every SquachWatch in range with");
+            y += 12;
+            snprintf(buf, sizeof buf, "your phrase to update to %s,", OtaCore::runningVersion());
+            line(t, y, Theme::WHITE, buf);
+            y += 12;
+            line(t, y, Theme::WHITE, "the version this one runs.");
+        }
 
         // The SHARE WIFI row, a settings row in shape.
         Theme::drawListRowPanel(t, w, g.shareY, g.shareH);
@@ -155,23 +176,38 @@ void uiSquadUpdateTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
             // otherwise hand out the password to a network nobody here can
             // see, and the boards it told could never act on it.
             snprintf(buf, sizeof buf, "None of your networks are in range.");
-        line(t, y, Theme::W95_LIGHT, buf);
-        y += 12;
-        line(t, y, Theme::W95_LIGHT, "Boards with their own WiFi use that.");
+        if (BIG) {
+            y += Theme::drawWrapped(t, 8, y, w - 16, buf, Theme::W95_LIGHT, Theme::BG);
+            Theme::drawWrapped(t, 8, y, w - 16, "Boards with their own WiFi use that.", Theme::W95_LIGHT, Theme::BG);
+            t.setTextSize(1);
+        } else {
+            line(t, y, Theme::W95_LIGHT, buf);
+            y += 12;
+            line(t, y, Theme::W95_LIGHT, "Boards with their own WiFi use that.");
+        }
 
         Theme::drawWin95Button(t, g.sendX, g.sendY, g.sendW, BTN_H, "SEND", false);
     } else {
         const uint32_t left = (now - s_sentAt < 60000u) ? (60000u - (now - s_sentAt)) / 1000u : 0;
         if (left) snprintf(buf, sizeof buf, "Sent. On the air for %lu s more.", (unsigned long)left);
         else      snprintf(buf, sizeof buf, "Sent. Boards report back here.");
-        line(t, y, Theme::WHITE, buf);
-        y += 12;
-        line(t, y, Theme::W95_LIGHT, "Each one joins WiFi, installs, restarts,");
-        y += 12;
-        line(t, y, Theme::W95_LIGHT, "and says so. A minute or two each.");
-        y += 18;
+        if (BIG) {
+            y += Theme::drawWrapped(t, 8, y, w - 16, buf, Theme::WHITE, Theme::BG);
+            y += Theme::drawWrapped(t, 8, y, w - 16,
+                                    "Each one joins WiFi, installs, restarts, and says so. A minute or two each.",
+                                    Theme::W95_LIGHT, Theme::BG) + 6;
+        } else {
+            line(t, y, Theme::WHITE, buf);
+            y += 12;
+            line(t, y, Theme::W95_LIGHT, "Each one joins WiFi, installs, restarts,");
+            y += 12;
+            line(t, y, Theme::W95_LIGHT, "and says so. A minute or two each.");
+            y += 18;
+        }
         if (s_tallyN == 0) {
+            t.setTextSize(Theme::SMALL_TEXT);
             line(t, y, Theme::CYAN, "Nobody yet.");
+            t.setTextSize(1);
         } else {
             t.setTextSize(2);
             const int colW = w / 2;

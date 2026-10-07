@@ -131,7 +131,29 @@ namespace Theme {
     static const int TITLE_ICON_W      = 28;
     static const int TITLE_ICON_BAND_H = 20;
     static const int LIST_TOP       = 16;   // under the corner icons
-    static const int LIST_HEADING_H = 14;   // the Settings group header's height
+#if defined(JC3248)
+    // Size-2 headings on the 3.5" panel: size 1 there is 8px letters that
+    // cannot be read at arm's length. The CYD keeps size 1, where the mesh
+    // menu's landscape note sits beside the heading and would collide.
+    static const int LIST_HEADING_TEXT = 2;
+    static const int LIST_HEADING_H    = 20;
+    // The size secondary text (notes, MACs, button labels, status lines)
+    // is drawn at. Size 1 on the 3.5" panel is the same 8px glyph the 2.8"
+    // CYD draws, on a screen held further away.
+    static const uint8_t SMALL_TEXT    = 2;
+#else
+    static const int LIST_HEADING_TEXT = 1;
+    static const int LIST_HEADING_H    = 14;
+    static const uint8_t SMALL_TEXT    = 1;
+#endif
+    // SMALL_TEXT if `s` fits in maxW at that size, else size 1. Leaves the
+    // size set and returns it, for text that has to stay on one line.
+    uint8_t setSmallText(TFT_eSPI& t, const char* s, int maxW);
+    // `s` word-wrapped into maxW at SMALL_TEXT, each line starting at x (or
+    // centred on x + maxW/2 when `centre`). Returns the height used. With
+    // draw = false it only measures, so a panel can be sized first.
+    int drawWrapped(TFT_eSPI& t, int x, int y, int maxW, const char* s,
+                    uint16_t fg, uint16_t bg, bool centre = false, bool draw = true);
     static const int PINNED_BACK_H  = 26;
     void drawListHeading(TFT_eSPI& t, const char* text, uint16_t color);
 

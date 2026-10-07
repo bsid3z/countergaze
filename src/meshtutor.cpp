@@ -88,7 +88,9 @@ const SquachMesh::Peer* guest() { return active() ? &s_demo : nullptr; }
 void drawCard(TFT_eSPI& t, bool atTop) {
     s_cardOn = false;
     if (!active()) return;
-    t.setTextSize(1);
+    // Theme::SMALL_TEXT: size 2 on the 3.5" panel, where the card simply
+    // grows to hold the extra lines.
+    t.setTextSize(Theme::SMALL_TEXT);
     t.setTextWrap(false);
     const int w = t.width(), h = t.height();
     const int cw = w - 8;
@@ -96,11 +98,12 @@ void drawCard(TFT_eSPI& t, bool atTop) {
     const int charW = t.textWidth("M");
     int maxW = cw - 16;
     if (maxW > 47 * charW) maxW = 47 * charW;
-    char lines[6][48];
-    const uint8_t n = Theme::wrapText(t, body(s_step), maxW, lines, 6);
+    char lines[10][48];
+    const uint8_t n = Theme::wrapText(t, body(s_step), maxW, lines, 10);
     const char* hn = hint(s_step);
     const int lh = t.fontHeight() + 1;
-    const int ch = 16 + n * lh + (hn ? lh + 2 : 0) + 4;
+    const int headH = 8 + t.fontHeight();          // 16 at size 1
+    const int ch = headH + n * lh + (hn ? lh + 2 : 0) + 4;
     const int cx = 4, cy = atTop ? 2 : h - ch - 2;
 
     t.fillRect(cx, cy, cw, ch, Theme::BG);
@@ -120,9 +123,9 @@ void drawCard(TFT_eSPI& t, bool atTop) {
     s_kx = (int16_t)(cx + cw - kw - 22);
     s_ky = (int16_t)cy;
     s_kw = (int16_t)(kw + 22);
-    s_kh = 22;
+    s_kh = (int16_t)(headH + 6);
 
-    int y = cy + 16;
+    int y = cy + headH;
     t.setTextColor(Theme::WHITE, Theme::BG);
     for (uint8_t i = 0; i < n; i++) {
         t.setCursor(cx + 6, y);

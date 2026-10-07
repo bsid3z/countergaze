@@ -87,86 +87,89 @@ void uiInviteTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     const int w = t.width(), h = t.height();
     t.fillRect(0, 0, w, h, Theme::BG);
     Theme::drawListHeading(t, "ADD TO SQUAD", Theme::VAPOR_PINK);
-    t.setTextSize(1);
     int y = Theme::LIST_TOP + Theme::LIST_HEADING_H + 10;
-    char line[48];
+    char line[64];
     const char* who = peer()[0] ? peer() : "SOMEONE";
     const Btns b = btns(t);
-    const int midY = y + 36 + (b.y - (y + 36) - 16) / 2;   // where a big line sits
+    // Paragraphs, wrapped and centred at Theme::SMALL_TEXT, each returning
+    // the y under it. The big line (dots, the code, YOU'RE IN, the phrase)
+    // goes in the middle of what is left under the text, so text that wraps
+    // to more lines at size 2 pushes it down instead of running into it.
+    auto para = [&](int py, uint16_t c, const char* str) {
+        return py + Theme::drawWrapped(t, 8, py, w - 16, str, c, Theme::BG, true) + 3;
+    };
+    auto midOf = [&](int below, int bigH) {
+        int m = below + (b.y - below - bigH) / 2;
+        return m < below + 4 ? below + 4 : m;
+    };
 
     switch (st()) {
-        case InviteState::OFFERING:
+        case InviteState::OFFERING: {
             snprintf(line, sizeof line, "Asking %s's board.", who);
-            centred(t, y, Theme::WHITE, line);
-            centred(t, y + 12, Theme::W95_LIGHT, "It will ask them to accept.");
-            centred(t, y + 24, Theme::W95_LIGHT, "Keep the boards close.");
-            {
-                // A slow dot march, so a still screen still reads as waiting.
-                const int n = (int)((now / 400) % 4);
-                char dots[8] = "";
-                for (int i = 0; i < n; i++) dots[i] = '.';
-                t.setTextSize(2);
-                centred(t, midY, Theme::CYAN, dots[0] ? dots : " ");
-                t.setTextSize(1);
-            }
-            break;
-        case InviteState::ASKED:
-            snprintf(line, sizeof line, "%s wants to add you", who);
-            centred(t, y, Theme::WHITE, line);
-            centred(t, y + 12, Theme::WHITE, "to their squad.");
-            centred(t, y + 30, Theme::W95_LIGHT, "You'd get their phrase: their");
-            centred(t, y + 42, Theme::W95_LIGHT, "messages, visits and updates.");
-            centred(t, y + 54, Theme::W95_LIGHT, "Only if you know who this is.");
-            break;
-        case InviteState::CODE: {
-            centred(t, y, Theme::WHITE, "Both boards show four digits.");
-            centred(t, y + 12, Theme::WHITE, "Read yours out. Do they match?");
-            t.setTextSize(3);
-            snprintf(line, sizeof line, "%04u", (unsigned)code());
-            centred(t, midY - 6, Theme::CYAN, line);
-            t.setTextSize(1);
-            centred(t, b.y - 16, Theme::W95_LIGHT, "Different digits means somebody is in the middle.");
+            int ty = para(y, Theme::WHITE, line);
+            ty = para(ty, Theme::W95_LIGHT, "It will ask them to accept. Keep the boards close.");
+            // A slow dot march, so a still screen still reads as waiting.
+            const int n = (int)((now / 400) % 4);
+            char dots[8] = "";
+            for (int i = 0; i < n; i++) dots[i] = '.';
+            t.setTextSize(2);
+            centred(t, midOf(ty, 16), Theme::CYAN, dots[0] ? dots : " ");
             break;
         }
-        case InviteState::SENDING:
+        case InviteState::ASKED: {
+            snprintf(line, sizeof line, "%s wants to add you to their squad.", who);
+            int ty = para(y, Theme::WHITE, line) + 6;
+            para(ty, Theme::W95_LIGHT,
+                 "You'd get their phrase: their messages, visits and updates. Only if you know who this is.");
+            break;
+        }
+        case InviteState::CODE: {
+            const int ty = para(y, Theme::WHITE, "Both boards show four digits. Read yours out. Do they match?");
+            const char* warn = "Different digits means somebody is in the middle.";
+            const int wh = Theme::drawWrapped(t, 8, 0, w - 16, warn, Theme::W95_LIGHT, Theme::BG, true, false);
+            const int wy = b.y - 6 - wh;
+            Theme::drawWrapped(t, 8, wy, w - 16, warn, Theme::W95_LIGHT, Theme::BG, true);
+            t.setTextSize(3);
+            snprintf(line, sizeof line, "%04u", (unsigned)code());
+            centred(t, ty + (wy - ty - t.fontHeight()) / 2, Theme::CYAN, line);
+            break;
+        }
+        case InviteState::SENDING: {
             snprintf(line, sizeof line, "Sending the phrase to %s.", who);
-            centred(t, y, Theme::WHITE, line);
-            centred(t, y + 12, Theme::W95_LIGHT, "Their board says when it has it.");
-            centred(t, y + 24, Theme::W95_LIGHT, "Half a minute at most.");
+            const int ty = para(y, Theme::WHITE, line);
+            para(ty, Theme::W95_LIGHT, "Their board says when it has it. Half a minute at most.");
             break;
-        case InviteState::WAITING:
-            centred(t, y, Theme::WHITE, "Waiting for the phrase.");
+        }
+        case InviteState::WAITING: {
+            const int ty = para(y, Theme::WHITE, "Waiting for the phrase.");
             snprintf(line, sizeof line, "%s's board is sending it.", who);
-            centred(t, y + 12, Theme::W95_LIGHT, line);
+            para(ty, Theme::W95_LIGHT, line);
             break;
-        case InviteState::JOINED:
+        }
+        case InviteState::JOINED: {
             snprintf(line, sizeof line, "You're in %s's squad.", who);
+            int ty = para(y, Theme::WHITE, line);
+            ty = para(ty, Theme::W95_LIGHT, "Messages and visits are on.");
             t.setTextSize(2);
-            centred(t, midY - 8, Theme::GREEN, "YOU'RE IN");
-            t.setTextSize(1);
-            centred(t, y, Theme::WHITE, line);
-            centred(t, y + 12, Theme::W95_LIGHT, "Messages and visits are on.");
+            centred(t, midOf(ty, 16), Theme::GREEN, "YOU'RE IN");
             break;
+        }
         case InviteState::DONE:
             if (MeshTalk::inviteConfirmed()) {
                 snprintf(line, sizeof line, "%s is in your squad.", who);
+                int ty = para(y, Theme::WHITE, line);
+                ty = para(ty, Theme::W95_LIGHT, "Messages and visits are on.");
                 t.setTextSize(2);
-                centred(t, midY - 8, Theme::GREEN, "ADDED");
-                t.setTextSize(1);
-                centred(t, y, Theme::WHITE, line);
-                centred(t, y + 12, Theme::W95_LIGHT, "Messages and visits are on.");
+                centred(t, midOf(ty, 16), Theme::GREEN, "ADDED");
             } else {
-                snprintf(line, sizeof line, "The phrase went out to %s,", who);
-                centred(t, y, Theme::WHITE, line);
-                centred(t, y + 12, Theme::WHITE, "but their board has not answered.");
-                centred(t, y + 24, Theme::W95_LIGHT, "Check their screen. If it did not");
-                centred(t, y + 36, Theme::W95_LIGHT, "take, SHOW PHRASE and read it out.");
+                snprintf(line, sizeof line, "The phrase went out to %s, but their board has not answered.", who);
+                const int ty = para(y, Theme::WHITE, line);
+                para(ty, Theme::W95_LIGHT, "Check their screen. If it did not take, SHOW PHRASE and read it out.");
             }
             break;
         case InviteState::FAILED:
             if (s_showPhrase) {
-                centred(t, y, Theme::WHITE, "Read this out. They type it");
-                centred(t, y + 12, Theme::WHITE, "under SQUACHMESH, PHRASE.");
+                const int ty = para(y, Theme::WHITE, "Read this out. They type it under SQUACHMESH, PHRASE.");
                 // Five words on two lines, big enough to read across a table.
                 {
                     const char* p = MeshTalk::phrase();
@@ -177,26 +180,24 @@ void uiInviteTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
                     snprintf(l1, sizeof l1, "%.*s", (int)cut, p);
                     snprintf(l2, sizeof l2, "%s", p + cut + (p[cut] == ' ' ? 1 : 0));
                     t.setTextSize(2);
-                    centred(t, midY - 12, Theme::CYAN, l1);
-                    if (l2[0]) centred(t, midY + 8, Theme::CYAN, l2);
-                    t.setTextSize(1);
+                    const int my = midOf(ty, 36);
+                    centred(t, my, Theme::CYAN, l1);
+                    if (l2[0]) centred(t, my + 20, Theme::CYAN, l2);
                 }
             } else {
-                centred(t, y, Theme::AMBER, "That didn't work.");
-                centred(t, y + 12, Theme::WHITE, MeshTalk::inviteWhy());
-                if (inviter() && Settings::phraseShown()) {
-                    centred(t, y + 30, Theme::W95_LIGHT, "The sure way: show them the phrase");
-                    centred(t, y + 42, Theme::W95_LIGHT, "and let them type it.");
-                } else if (inviter()) {
-                    centred(t, y + 30, Theme::W95_LIGHT, "This board keeps its phrase hidden.");
-                    centred(t, y + 42, Theme::W95_LIGHT, "Move closer and try again.");
-                }
+                int ty = para(y, Theme::AMBER, "That didn't work.");
+                ty = para(ty, Theme::WHITE, MeshTalk::inviteWhy()) + 6;
+                if (inviter() && Settings::phraseShown())
+                    para(ty, Theme::W95_LIGHT, "The sure way: show them the phrase and let them type it.");
+                else if (inviter())
+                    para(ty, Theme::W95_LIGHT, "This board keeps its phrase hidden. Move closer and try again.");
             }
             break;
         default:
-            centred(t, y, Theme::W95_LIGHT, "Nothing going on.");
+            para(y, Theme::W95_LIGHT, "Nothing going on.");
             break;
     }
+    t.setTextSize(1);
 
     const Page pg = page();
     if (pg.one)  Theme::drawWin95Button(t, b.oneX, b.y, b.w, BTN_H, pg.one, false);

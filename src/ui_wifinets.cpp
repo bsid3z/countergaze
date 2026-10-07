@@ -10,8 +10,11 @@ namespace {
 
 const int BTN_H   = 28;
 const int ROW_Y0  = 36;
-const int ROW_H   = 26;
-const int ROW_GAP = 3;
+// Taller rows where the text is size 2 (Theme::SMALL_TEXT): the saved list
+// stacks a name over its status line, the scan list is one line.
+const int ROW_H     = Theme::SMALL_TEXT > 1 ? 30 : 26;
+const int NET_ROW_H = Theme::SMALL_TEXT > 1 ? 42 : 26;
+const int ROW_GAP   = 3;
 
 int s_selected = -1;
 
@@ -40,14 +43,16 @@ Bar bar(TFT_eSPI& t, int n) {
     return b;
 }
 
-int rowsThatFit(TFT_eSPI& t, int barTop) {
-    const int n = (barTop - 6 - ROW_Y0) / (ROW_H + ROW_GAP);
+int rowsThatFit(TFT_eSPI& t, int barTop, int rowH) {
+    const int n = (barTop - 6 - ROW_Y0) / (rowH + ROW_GAP);
     return n < 1 ? 1 : n;
 }
 
 void paragraph(TFT_eSPI& t, int y, uint16_t c, const char* s) {
     // Wrapped at the screen width, on the small font, a word at a time.
+    t.setTextSize(Theme::SMALL_TEXT);
     const int maxW = t.width() - 16;
+    const int lineH = t.fontHeight() + 3;
     char line[72] = "";
     t.setTextColor(c, Theme::BG);
     while (*s) {
@@ -59,7 +64,7 @@ void paragraph(TFT_eSPI& t, int y, uint16_t c, const char* s) {
         char trial[72];
         snprintf(trial, sizeof trial, "%s%s%s", line, line[0] ? " " : "", word);
         if (line[0] && t.textWidth(trial) > maxW) {
-            t.setCursor(8, y); t.print(line); y += 11;
+            t.setCursor(8, y); t.print(line); y += lineH;
             snprintf(line, sizeof line, "%s", word);
         } else {
             snprintf(line, sizeof line, "%s", trial);
@@ -110,7 +115,7 @@ int  uiWifiNetsSelected()      { return s_selected; }
 void uiWifiNetsTick(TFT_eSPI& t, uint32_t now) {
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
     Theme::drawTitleBar(t, ">> WIFI NETWORKS <<");
-    t.setTextSize(1);
+    t.setTextSize(Theme::SMALL_TEXT);
     t.setTextWrap(false);
     const int w = t.width();
     const uint8_t n = OtaWifi::savedCount();
@@ -120,13 +125,14 @@ void uiWifiNetsTick(TFT_eSPI& t, uint32_t now) {
                   "No networks saved. ADD picks one from a scan. The password is checked at the next boot, "
                   "and this list says how that went.");
     }
-    const int fit = rowsThatFit(t, b.y[0]);
+    const int fit = rowsThatFit(t, b.y[0], NET_ROW_H);
     for (int i = 0; i < n && i < fit; i++) {
-        const int y = ROW_Y0 + i * (ROW_H + ROW_GAP);
+        const int y = ROW_Y0 + i * (NET_ROW_H + ROW_GAP);
         const bool sel = i == s_selected;
         const bool use = i == OtaWifi::savedUse();
-        t.fillRect(8, y, w - 16, ROW_H, Theme::TASKBAR);
-        t.drawRect(8, y, w - 16, ROW_H, sel ? Theme::VAPOR_PINK : Theme::VAPOR_PURPLE);
+        t.setTextSize(Theme::SMALL_TEXT);
+        t.fillRect(8, y, w - 16, NET_ROW_H, Theme::TASKBAR);
+        t.drawRect(8, y, w - 16, NET_ROW_H, sel ? Theme::VAPOR_PINK : Theme::VAPOR_PURPLE);
         const char* tag  = use ? "USE" : "";
         const int   tagW = tag[0] ? t.textWidth(tag) + 6 : 0;
         const int maxChars = (w - 16 - 12 - tagW) / t.textWidth("M");
@@ -140,9 +146,11 @@ void uiWifiNetsTick(TFT_eSPI& t, uint32_t now) {
             t.setCursor(w - 16 - tagW, y + 4);
             t.print(tag);
         }
+        const int line2 = y + 4 + t.fontHeight() + 3;
         const OtaWifi::SavedResult r = OtaWifi::savedResult((uint8_t)i);
+        Theme::setSmallText(t, resultWords(r), w - 16 - 12);
         t.setTextColor(resultColour(r), Theme::TASKBAR);
-        t.setCursor(14, y + 15);
+        t.setCursor(14, line2);
         t.print(resultWords(r));
     }
     const bool haveSel = s_selected >= 0 && s_selected < n;
@@ -156,11 +164,11 @@ void uiWifiNetsTick(TFT_eSPI& t, uint32_t now) {
 
 WifiNetsHit uiWifiNetsHit(TFT_eSPI& t, int x, int y, int* row) {
     const Bar b = bar(t, 4);
-    const int fit = rowsThatFit(t, b.y[0]);
+    const int fit = rowsThatFit(t, b.y[0], NET_ROW_H);
     const uint8_t n = OtaWifi::savedCount();
     for (int i = 0; i < n && i < fit; i++) {
-        const int ry = ROW_Y0 + i * (ROW_H + ROW_GAP);
-        if (y >= ry && y < ry + ROW_H + ROW_GAP && x >= 8 && x <= t.width() - 8) {
+        const int ry = ROW_Y0 + i * (NET_ROW_H + ROW_GAP);
+        if (y >= ry && y < ry + NET_ROW_H + ROW_GAP && x >= 8 && x <= t.width() - 8) {
             if (row) *row = i;
             return WifiNetsHit::ROW;
         }
@@ -181,11 +189,11 @@ void uiWifiAddInit(TFT_eSPI& t) {
 void uiWifiAddTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
     Theme::drawTitleBar(t, ">> ADD A NETWORK <<");
-    t.setTextSize(1);
+    t.setTextSize(Theme::SMALL_TEXT);
     t.setTextWrap(false);
     const int w = t.width();
     const Bar b = bar(t, 2);
-    const int fit = rowsThatFit(t, b.y[0]);
+    const int fit = rowsThatFit(t, b.y[0], ROW_H);
     if (!eng.rawWifiScanDone()) {
         const char* dots[] = { "SCANNING", "SCANNING.", "SCANNING..", "SCANNING..." };
         t.setTextColor(Theme::CYAN, Theme::BG);
@@ -200,6 +208,7 @@ void uiWifiAddTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         const char* ssid = eng.rawWifiSsid((uint8_t)i);
         const bool saved = OtaWifi::savedIndexOf(ssid) >= 0;
         const bool open  = eng.rawWifiOpen((uint8_t)i);
+        t.setTextSize(Theme::SMALL_TEXT);
         t.fillRect(8, y, w - 16, ROW_H, Theme::TASKBAR);
         t.drawRect(8, y, w - 16, ROW_H, Theme::VAPOR_PURPLE);
         const char* tag  = saved ? "SAVED" : (open ? "OPEN" : "");
@@ -224,7 +233,7 @@ void uiWifiAddTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
 
 WifiAddHit uiWifiAddHit(TFT_eSPI& t, int x, int y, const DetectionEngine& eng, int* row) {
     const Bar b = bar(t, 2);
-    const int fit = rowsThatFit(t, b.y[0]);
+    const int fit = rowsThatFit(t, b.y[0], ROW_H);
     const uint8_t n = eng.rawWifiScanDone() ? eng.rawWifiCount() : 0;
     for (int i = 0; i < n && i < fit; i++) {
         const int ry = ROW_Y0 + i * (ROW_H + ROW_GAP);

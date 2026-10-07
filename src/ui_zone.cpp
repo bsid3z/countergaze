@@ -7,8 +7,11 @@
 #include <stdio.h>
 
 namespace {
-constexpr int CARD_W = 232, CARD_H = 96;
-constexpr int BTN_H  = 20;
+// Bigger where the small text is size 2 (Theme::SMALL_TEXT): every line on
+// the card is size 2 there, and the buttons are tall enough for their labels.
+constexpr bool BIG   = Theme::SMALL_TEXT > 1;
+constexpr int CARD_W = BIG ? 300 : 232, CARD_H = BIG ? 126 : 96;
+constexpr int BTN_H  = BIG ? 28 : 20;
 
 void cardRect(int screenW, int screenH, int& x, int& y) {
     x = (screenW - CARD_W) / 2;
@@ -34,7 +37,7 @@ void uiZoneCardDraw(TFT_eSPI& t, uint32_t now) {
     t.fillRoundRect(x, y, CARD_W, CARD_H, 6, Theme::BG);
     t.drawRoundRect(x, y, CARD_W, CARD_H, 6, Theme::VAPOR_PURPLE);
     t.drawRoundRect(x + 1, y + 1, CARD_W - 2, CARD_H - 2, 5, Theme::VAPOR_PURPLE);
-    t.setTextSize(1);
+    t.setTextSize(Theme::SMALL_TEXT);
     t.setTextWrap(false);
     const char* head = "WHICH TIME ZONE?";
     t.setTextColor(Theme::CYAN, Theme::BG);
@@ -45,16 +48,16 @@ void uiZoneCardDraw(TFT_eSPI& t, uint32_t now) {
     t.setTextSize(2);
     const char* zn = Settings::timeZoneName();
     t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
-    t.setCursor(x + (CARD_W - t.textWidth(zn)) / 2, y + 22);
+    t.setCursor(x + (CARD_W - t.textWidth(zn)) / 2, y + (BIG ? 30 : 22));
     t.print(zn);
-    t.setTextSize(1);
     char tm[8], date[20], line[32];
     bool pm = false;
     Clock::formatTime(tm, sizeof tm, true, &pm);
     Clock::formatDate(date, sizeof date);
     snprintf(line, sizeof line, "%s %s  %s", tm, pm ? "PM" : "AM", date);
+    Theme::setSmallText(t, line, CARD_W - 12);
     t.setTextColor(Theme::VAPOR_YELLOW, Theme::BG);
-    t.setCursor(x + (CARD_W - t.textWidth(line)) / 2, y + 44);
+    t.setCursor(x + (CARD_W - t.textWidth(line)) / 2, y + (BIG ? 54 : 44));
     t.print(line);
     int px, okx, okw, nx, by;
     buttonRects(x, y, px, okx, okw, nx, by);

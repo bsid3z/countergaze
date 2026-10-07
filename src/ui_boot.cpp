@@ -208,12 +208,12 @@ void uiBootTick(TFT_eSPI& t, uint32_t now) {
     // that already reads as status text, not brand/character content,
     // so it's the natural place for a version stamp without touching
     // his space.
-    t.setTextSize(1);
     t.setTextColor(Theme::CYAN);
     char init[56];   // room for a full "git describe --dirty" string, not just a bare tag
     snprintf(init, sizeof(init), "INITIALIZING...  %s", FIRMWARE_VERSION);
+    Theme::setSmallText(t, init, w - 8);
     int iw = t.textWidth(init);
-    t.setCursor((w - iw) / 2, h - 16);
+    t.setCursor((w - iw) / 2, h - 8 - t.fontHeight());
     t.print(init);
 
     // animated scanline sweeping top to bottom every 600 ms

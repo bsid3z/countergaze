@@ -1534,6 +1534,32 @@ static void enterSettings() {
     uiSettingsInit(*canvas);
 }
 
+// Drag-to-scroll for the settings lists. Returns the scroll step for this
+// frame (-1, 0 or +1) and sets `moved` once the touch has become a drag.
+//
+// A finger wobbles more than 10px while pressing a button, and that wobble
+// used to count as a scroll: the list moved a row and the tap was thrown
+// away. Nothing scrolls until the touch is 20px from where it went down;
+// after that it steps a row every 10px, as before.
+static int menuDragStep(int y, int startY, bool& moved, int& lastY) {
+    if (!moved && abs(y - startY) <= 20) return 0;
+    const int dy = y - lastY;
+    if (abs(dy) <= 10) return 0;
+    moved = true;
+    lastY = y;
+    return dy > 0 ? -1 : 1;
+}
+
+// The way back from a screen a Settings row opened: same page, same scroll,
+// rather than enterSettings()'s fresh start at the top of the main list.
+static void returnToSettings() {
+    Settings::deskActive(false);
+    Theme::releaseClockBackdrop();
+    state = AppState::SETTINGS;
+    transitionStart = millis();
+    uiSettingsResume(*canvas);
+}
+
 static void enterDesk() {
     Settings::deskActive(true);
     state = AppState::DESK;
@@ -2863,7 +2889,9 @@ void loop() {
     // drawTitleBar) and this handler is skipped — so there is no control
     // on screen that looks live and does nothing.
 #if !defined(AWOK)
-    if (tp.valid && !Settings::rotationLocked() &&
+    // On the press only, like the padlock above: firing while the finger was
+    // merely down let a scroll drag that crossed the corner rotate the screen.
+    if (touchJustDown && !Settings::rotationLocked() &&
         (state == AppState::CLEAR || state == AppState::LOG ||
                       state == AppState::SETTINGS || state == AppState::OUTFIT ||
                       state == AppState::RAWSCAN || state == AppState::DETECTION_FILTER ||
@@ -2935,7 +2963,9 @@ void loop() {
     // it was entered from — this is the only way back out of either
     // screen, since OUTFIT's own taps are all claimed by the arrows and
     // DETECTION_FILTER's are all claimed by row toggles.
-    if (tp.valid && (state == AppState::CLEAR || state == AppState::LOG ||
+    // On the press only: firing while the finger was merely down let a list
+    // drag that passed through the top-left corner jump up a level.
+    if (touchJustDown && (state == AppState::CLEAR || state == AppState::LOG ||
                       state == AppState::SETTINGS || state == AppState::OUTFIT ||
                       state == AppState::RAWSCAN || state == AppState::DETECTION_FILTER ||
                       state == AppState::IGNORE_LIST || state == AppState::POWER_SAVER ||
@@ -2951,12 +2981,11 @@ void loop() {
         lastTouch = now;
         if (state == AppState::STATUS_LIGHT) {
             // Back to the APPEARANCE page it was opened from, not the top.
-            enterSettings();
-            uiSettingsOpenAppearance(true);
+            returnToSettings();
         }
         else if (state == AppState::OUTFIT || state == AppState::DETECTION_FILTER ||
             state == AppState::IGNORE_LIST || state == AppState::POWER_SAVER ||
-            state == AppState::SECURITY) enterSettings();
+            state == AppState::SECURITY) returnToSettings();
         else if (state == AppState::SETTINGS) {
             // The gear on a sub-page goes back up a level, the way it does
             // from every other screen Settings opens.
@@ -4139,7 +4168,7 @@ void loop() {
                         uiSettingsSetConfirm(SettingsRow::NONE);
                         if (pending == SettingsRow::CALIBRATE) {
                             runTouchCalibration();
-                            enterSettings();
+                            returnToSettings();
                         } else if (pending == SettingsRow::RESET_STATS) {
                             engine.resetLifetime();
                         } else if (pending == SettingsRow::BORING_MODE) {
@@ -4163,12 +4192,7 @@ void loop() {
                 lastY = tp.y;
             }
             if (tp.valid && gestureActive) {
-                int dy = tp.y - lastY;
-                if (abs(dy) > 10) {
-                    gestureMoved = true;
-                    uiSettingsScroll(dy > 0 ? -1 : 1);
-                    lastY = tp.y;
-                }
+                if (int st = menuDragStep(tp.y, gestureStartY, gestureMoved, lastY)) uiSettingsScroll(st);
             }
             if (touchJustUp && gestureActive) {
                 if (!gestureMoved) {
@@ -4193,12 +4217,11 @@ void loop() {
                         gestureActive = false;
                         break;
                     }
-                    // A heading folds its group away. Spends the tap.
-                    if (uiSettingsTapHeader(*canvas, gestureStartX, gestureStartY,
-                                             tft.width(), tft.height())) {
-                        gestureActive = false;
-                        break;
-                    }
+                    // Group headings used to fold their group on a tap. They
+                    // sit flush against the rows, so a slightly high or low
+                    // press folded a group and threw the list back to the
+                    // top instead of pressing the row. A heading is just a
+                    // label now; the hit test returns NONE for it.
                     SettingsRow row = uiSettingsHitTest(*canvas, gestureStartX, gestureStartY, tft.width(), tft.height());
                     // Switched off by a mode: say so, rather than doing nothing
                     // and reading as a broken row.
@@ -4362,7 +4385,7 @@ void loop() {
                         break;
                     // Nothing is stored on NO. Declining is not a decision
                     // worth remembering -- it just means not now.
-                    case MeshWarnHit::NO: enterSettings(); break;
+                    case MeshWarnHit::NO: returnToSettings(); break;
                     default: break;
                 }
             }
@@ -4372,7 +4395,7 @@ void loop() {
             uiMeshMenuTick(*canvas, now, engine);
             if (touchJustDown && Theme::pinnedBackHit(tp.x, tp.y, canvas->width(), canvas->height())) {
                 lastTouch = now;
-                enterSettings();
+                returnToSettings();
                 break;
             }
             if (touchJustDown) {
@@ -4397,7 +4420,7 @@ void loop() {
                     case MeshMenuRow::SQUAD:    enterSquad(true);              break;
                     case MeshMenuRow::PHRASE:   enterMeshPhrase();             break;
                     case MeshMenuRow::NAME:     enterPhone();                  break;
-                    case MeshMenuRow::BACK:     enterSettings();               break;
+                    case MeshMenuRow::BACK:     returnToSettings();            break;
                     default: break;
                 }
             }
@@ -4494,8 +4517,7 @@ void loop() {
                         uiUpdateInit(*canvas);
                         break;
                     case UpdateHit::BACK:
-                        enterSettings();
-                        uiSettingsOpenPage(SettingsPage::SYSTEM);
+                        returnToSettings();
                         break;
 #if SQUACH_MESH
                     case UpdateHit::SQUAD_START: enterSquadUpdate(); break;
@@ -4566,7 +4588,7 @@ void loop() {
                         else
                             enterWifiAdd();
                         break;
-                    case WifiNetsHit::BACK: enterSettings(); break;
+                    case WifiNetsHit::BACK: returnToSettings(); break;
                     default: break;
                 }
             }
@@ -4760,18 +4782,13 @@ void loop() {
                 ilStartX = tp.x; ilStartY = tp.y; ilLastY = tp.y;
             }
             if (tp.valid && ilActive) {
-                int dy = tp.y - ilLastY;
-                if (abs(dy) > 10) {
-                    ilMoved = true;
-                    uiIgnoreListScroll(dy > 0 ? -1 : 1);
-                    ilLastY = tp.y;
-                }
+                if (int st = menuDragStep(tp.y, ilStartY, ilMoved, ilLastY)) uiIgnoreListScroll(st);
             }
             if (touchJustUp && ilActive) {
                 if (!ilMoved && Theme::pinnedBackHit(ilStartX, ilStartY, tft.width(), tft.height())) {
                     ilActive = false;
                     lastTouch = now;
-                    enterSettings();
+                    returnToSettings();
                     break;
                 }
                 if (!ilMoved) {
@@ -4813,18 +4830,13 @@ void loop() {
                 lastY = tp.y;
             }
             if (tp.valid && gestureActive) {
-                int dy = tp.y - lastY;
-                if (abs(dy) > 10) {
-                    gestureMoved = true;
-                    uiDetFilterScroll(dy > 0 ? -1 : 1);
-                    lastY = tp.y;
-                }
+                if (int st = menuDragStep(tp.y, gestureStartY, gestureMoved, lastY)) uiDetFilterScroll(st);
             }
             if (touchJustUp && gestureActive) {
                 if (!gestureMoved && Theme::pinnedBackHit(gestureStartX, gestureStartY, tft.width(), tft.height())) {
                     gestureActive = false;
                     lastTouch = now;
-                    enterSettings();
+                    returnToSettings();
                     break;
                 }
                 if (!gestureMoved) {
@@ -4865,14 +4877,13 @@ void loop() {
                 gestureStartX = tp.x; gestureStartY = tp.y; lastY = tp.y;
             }
             if (tp.valid && gestureActive) {
-                int dy = tp.y - lastY;
-                if (abs(dy) > 10) { gestureMoved = true; uiSecurityScroll(dy > 0 ? -1 : 1); lastY = tp.y; }
+                if (int st = menuDragStep(tp.y, gestureStartY, gestureMoved, lastY)) uiSecurityScroll(st);
             }
             if (touchJustUp && gestureActive) {
                 gestureActive = false;
                 if (!gestureMoved && Theme::pinnedBackHit(gestureStartX, gestureStartY, tft.width(), tft.height())) {
                     lastTouch = now;
-                    enterSettings();
+                    returnToSettings();
                     break;
                 }
                 if (!gestureMoved) {
@@ -5033,18 +5044,13 @@ void loop() {
                 gestureStartX = tp.x; gestureStartY = tp.y; lastY = tp.y;
             }
             if (tp.valid && gestureActive) {
-                int dy = tp.y - lastY;
-                if (abs(dy) > 10) {
-                    gestureMoved = true;
-                    uiPowerScroll(dy > 0 ? -1 : 1);
-                    lastY = tp.y;
-                }
+                if (int st = menuDragStep(tp.y, gestureStartY, gestureMoved, lastY)) uiPowerScroll(st);
             }
             if (touchJustUp && gestureActive) {
                 if (!gestureMoved && Theme::pinnedBackHit(gestureStartX, gestureStartY, tft.width(), tft.height())) {
                     gestureActive = false;
                     lastTouch = now;
-                    enterSettings();
+                    returnToSettings();
                     break;
                 }
                 if (!gestureMoved) {
@@ -5093,19 +5099,13 @@ void loop() {
                 gestureStartX = tp.x; gestureStartY = tp.y; lastY = tp.y;
             }
             if (tp.valid && gestureActive) {
-                int dy = tp.y - lastY;
-                if (abs(dy) > 10) {
-                    gestureMoved = true;
-                    uiLightScroll(dy > 0 ? -1 : 1);
-                    lastY = tp.y;
-                }
+                if (int st = menuDragStep(tp.y, gestureStartY, gestureMoved, lastY)) uiLightScroll(st);
             }
             if (touchJustUp && gestureActive) {
                 if (!gestureMoved && Theme::pinnedBackHit(gestureStartX, gestureStartY, tft.width(), tft.height())) {
                     gestureActive = false;
                     lastTouch = now;
-                    enterSettings();
-                    uiSettingsOpenAppearance(true);
+                    returnToSettings();
                     break;
                 }
                 if (!gestureMoved) {
@@ -5262,7 +5262,7 @@ void loop() {
             if (tp.valid && (now - lastTouch) > TOUCH_DEBOUNCE_MS &&
                 uiDiagnosticsHitBack(tp.x, tp.y, tft.width(), tft.height())) {
                 lastTouch = now;
-                enterSettings();
+                returnToSettings();
             }
             break;
         }
@@ -5298,7 +5298,7 @@ void loop() {
                 } else if (ctap == ColorCheckTap::DONE) {
                     lastTouch = now;
                     Settings::markColorChecked();
-                    if (s_colorCheckFromSettings) enterSettings();
+                    if (s_colorCheckFromSettings) returnToSettings();
                     else                           enterClear();
                 }
             }
@@ -5307,10 +5307,11 @@ void loop() {
         case AppState::DIARY: {
             uiDiaryTick(*canvas, now, engine);
             // Simple read-only info panel — any tap takes you back,
-            // no button bar or scroll needed.
-            if (tp.valid && (now - lastTouch) > TOUCH_DEBOUNCE_MS) {
+            // no button bar or scroll needed. Back to the Settings row it
+            // was opened from: it used to drop you on the main screen.
+            if (touchJustDown && (now - lastTouch) > TOUCH_DEBOUNCE_MS) {
                 lastTouch = now;
-                enterClear();
+                returnToSettings();
             }
             break;
         }
@@ -5318,16 +5319,13 @@ void loop() {
             uiOutfitTick(*canvas, now, engine);
             // Arrow taps cycle the equipped outfit (already persisted
             // live, no separate "confirm" step needed); a tap anywhere
-            // else jumps straight back to the main screen, same "tap to
-            // dismiss" feel as the Diary screen — the settings icon
-            // (handled by the global back-navigation check above, which
-            // runs before this switch and already changes `state`
-            // itself when it fires) remains the way back to SETTINGS
-            // specifically.
+            // else goes back to the APPEARANCE page it was opened from.
+            // It used to go to the main screen, so a press that just
+            // missed an arrow threw you out of Settings altogether.
             if (tp.valid && (now - lastTouch) > TOUCH_DEBOUNCE_MS) {
                 lastTouch = now;
                 if (!uiOutfitTapArrow(tp.x, tp.y, tft.width(), tft.height())) {
-                    enterClear();
+                    returnToSettings();
                 }
             }
             break;

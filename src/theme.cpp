@@ -187,7 +187,11 @@ static const int ROTATE_ICON_W = Theme::TITLE_ICON_W;
 // so what made these awkward to hit was never the hit box -- it was that they
 // looked tiny and people aimed at the drawing rather than at the button.
 static const int ROTATE_HIT_W  = 55;
-static const int ROTATE_HIT_H  = 50;
+// 30, not 50: Settings' first row starts at y=32 and the sub-screens' lists
+// at y=30-36, so a 50px box reached 18px into the first row. A press on
+// that row's right end (an ON/OFF, BRIGHT's "+") rotated the screen, and on
+// its left end went up a level through the gear, which shares this height.
+static const int ROTATE_HIT_H  = 30;
 
 static void drawRotateIcon(TFT_eSPI& t, int w, int barH) {
     int x0 = w - ROTATE_ICON_W;
@@ -218,7 +222,7 @@ bool rotateButtonHit(int x, int y, int w) {
 // rotate icon on the other side.
 static const int SETTINGS_ICON_W = Theme::TITLE_ICON_W;
 static const int SETTINGS_HIT_W  = 55;
-static const int SETTINGS_HIT_H  = 50;
+static const int SETTINGS_HIT_H  = 30;   // see ROTATE_HIT_H
 // The two icons float over live background now that the bar behind them is
 // gone, so each keeps a small opaque box of its own -- without it a thin
 // cyan glyph disappears against the synthwave sun.
@@ -400,11 +404,55 @@ int  bubbleTextH()  { bubbleMeasure(); return s_bubAb + s_bubBb; }
 int  bubbleAscent() { bubbleMeasure(); return s_bubAb; }
 #endif
 
+uint8_t setSmallText(TFT_eSPI& t, const char* s, int maxW) {
+    uint8_t size = SMALL_TEXT;
+    t.setTextSize(size);
+    if (size > 1 && t.textWidth(s) > maxW) { size = 1; t.setTextSize(1); }
+    return size;
+}
+
+int drawWrapped(TFT_eSPI& t, int x, int y, int maxW, const char* s,
+                uint16_t fg, uint16_t bg, bool centre, bool draw) {
+    t.setTextSize(SMALL_TEXT);
+    t.setTextWrap(false);
+    t.setTextColor(fg, bg);
+    const int lineH = t.fontHeight() + 3;
+    int used = 0;
+    char line[96] = "";
+    auto flush = [&]() {
+        if (draw) {
+            const int lw = t.textWidth(line);
+            t.setCursor(centre ? x + (maxW - lw) / 2 : x, y + used);
+            t.print(line);
+        }
+        used += lineH;
+        line[0] = '\0';
+    };
+    while (s && *s) {
+        while (*s == ' ') s++;
+        if (!*s) break;
+        const char* e = s;
+        while (*e && *e != ' ') e++;
+        char trial[96];
+        snprintf(trial, sizeof trial, "%s%s%.*s", line, line[0] ? " " : "", (int)(e - s), s);
+        if (line[0] && t.textWidth(trial) > maxW) {
+            flush();
+            snprintf(line, sizeof line, "%.*s", (int)(e - s), s);
+        } else {
+            snprintf(line, sizeof line, "%s", trial);
+        }
+        s = e;
+    }
+    if (line[0]) flush();
+    return used;
+}
+
 void drawListHeading(TFT_eSPI& t, const char* text, uint16_t color) {
-    t.setTextSize(1);
+    t.setTextSize(LIST_HEADING_TEXT);
     t.setTextColor(color, BG);
     t.setCursor(8, LIST_TOP + (LIST_HEADING_H - t.fontHeight()) / 2);
     t.print(text);
+    t.setTextSize(1);
 }
 
 void drawListRowPanel(TFT_eSPI& t, int w, int y, int hgt) {
@@ -471,6 +519,12 @@ void drawButton(TFT_eSPI& t, int x, int y, int w, int h,
     uint16_t fg   = pressed ? labelOn(PURPLE) : CYAN;
     t.fillRect(x, y, w, h, fill);
     t.drawRect(x, y, w, h, PURPLE);
+    // Up to SMALL_TEXT where the label fits, so a size-1 button is not 8px
+    // letters on the 3.5" panel. A no-op on boards where SMALL_TEXT is 1.
+    if (textSize < SMALL_TEXT) {
+        t.setTextSize(SMALL_TEXT);
+        if (t.textWidth(label) <= w - 8 && t.fontHeight() <= h - 4) textSize = SMALL_TEXT;
+    }
     t.setTextSize(textSize);
     t.setTextColor(fg, fill);
     int tw = t.textWidth(label);
@@ -511,8 +565,9 @@ void drawWin95Button(TFT_eSPI& t, int x, int y, int w, int h,
     // the tell that it is a costume. Centred on the FACE rather than on the
     // whole rect, so the bevel does not pull the text off-centre, then the
     // one-pixel press offset on top.
-    t.setTextSize(1);
     t.setTextWrap(false);
+    t.setTextSize(SMALL_TEXT);
+    if (t.textWidth(label) > w - 8 || t.fontHeight() > h - 6) t.setTextSize(1);
     t.setTextColor(BLACK, W95_FACE);
     const int tw = t.textWidth(label);
     const int th = t.fontHeight();
@@ -4255,13 +4310,14 @@ void drawToast(TFT_eSPI& t, uint32_t now) {
     const int w = t.width(), h = t.height();
     t.setTextSize(2);
     int bw = t.textWidth(s_toastHead) + 30;
+    uint8_t subSize = 1;
     if (s_toastSub[0]) {
-        t.setTextSize(1);
+        subSize = setSmallText(t, s_toastSub, w - 50);
         const int sw = t.textWidth(s_toastSub) + 30;
         if (sw > bw) bw = sw;
     }
     if (bw > w - 20) bw = w - 20;
-    const int bh = s_toastSub[0] ? 48 : 34;
+    const int bh = s_toastSub[0] ? (subSize > 1 ? 56 : 48) : 34;
     const int bx = (w - bw) / 2, by = (h - bh) / 2;
 
     t.fillRect(bx, by, bw, bh, BG);
@@ -4273,7 +4329,7 @@ void drawToast(TFT_eSPI& t, uint32_t now) {
     t.setCursor(bx + (bw - t.textWidth(s_toastHead)) / 2, by + 8);
     t.print(s_toastHead);
     if (s_toastSub[0]) {
-        t.setTextSize(1);
+        t.setTextSize(subSize);
         t.setTextColor(WHITE, BG);
         t.setCursor(bx + (bw - t.textWidth(s_toastSub)) / 2, by + 31);
         t.print(s_toastSub);
@@ -9227,12 +9283,12 @@ void drawBangersOutline(TFT_eSPI& t, int x, int y, const char* s, uint16_t color
 // buffer just means that happens less often in the first place.
 uint8_t wrapText(TFT_eSPI& t, const char* text, int maxW,
                  char lines[][48], uint8_t maxLines) {
-    // 320, not the original 160 -- fine for every short quip/bubble
-    // this ran on originally, but LOG's MORE INFO panel passes real
-    // paragraph-length explanations (the RSSI/confidence primer alone
-    // is ~290 chars), which strncpy was silently truncating before a
-    // single word ever got wrapped.
-    char buf[320];
+    // 640, not 320 -- and 320 was itself raised from 160 for the same
+    // reason. MORE INFO passes whole paragraphs, and FLOCK's runs to 430
+    // characters, HACKER's to 500 and IBEACON's to 560: at 320 FLOCK lost
+    // the sentence that says a LOW reading is probably NOT a Flock camera,
+    // which is the one thing that paragraph exists to say.
+    char buf[640];
     strncpy(buf, text, sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = 0;
 
@@ -9262,7 +9318,9 @@ uint8_t wrapText(TFT_eSPI& t, const char* text, int maxW,
 
 // Info panel geometry -- see theme.h's comment on drawInfoPanel() for
 // what this is/who uses it.
-static const uint8_t INFO_MAX_LINES = 7;
+// Room for the longest paragraph at size 1 on a 240px-wide screen. How many
+// are drawn is decided by the space, in drawInfoPanel().
+static const uint8_t INFO_MAX_LINES = 32;
 
 static void infoRects(int screenW, int screenH,
                        int& px, int& py, int& pw, int& ph,
@@ -9274,10 +9332,13 @@ static void infoRects(int screenW, int screenH,
     // description text (size 1, see drawInfoPanel()) still needs real
     // room, and a small-margin modal reads fine here since it's the
     // only thing on screen while it's up.
+    // The 3.5" panel (Theme::SMALL_TEXT 2) gets the whole screen: its text
+    // is size 2 wherever the paragraph fits, and needs the room.
+    const bool big = SMALL_TEXT > 1;
     pw = screenW - 16;
-    if (pw > 300) pw = 300;
+    if (!big && pw > 300) pw = 300;
     ph = screenH - 8;
-    if (ph > 260) ph = 260;
+    if (!big && ph > 260) ph = 260;
     px = (screenW - pw) / 2;
     py = (screenH - ph) / 2;
 
@@ -9325,18 +9386,29 @@ void drawInfoPanel(TFT_eSPI& t, int w, int h, uint32_t now,
 
     Squachy::drawWaving(t, squachyCx, squachyBaseY, now, squachyScale, nullptr, true, squachyWander);
 
-    t.setTextSize(1);
+    // Size 2 (SMALL_TEXT) when the whole paragraph fits between Squachy and
+    // the button at that size, else size 1 -- never cut short. It used to
+    // stop at seven lines whatever the screen had room for.
     t.setTextWrap(false);
     t.setTextColor(WHITE, BG);
     char lines[INFO_MAX_LINES][48];
-    uint8_t n = wrapText(t, text, textMaxW, lines, INFO_MAX_LINES);
+    const int room = btnY - 4 - textTop;
+    uint8_t n = 0;
+    int lineH = 12;
+    for (uint8_t size = SMALL_TEXT; size >= 1; size--) {
+        t.setTextSize(size);
+        lineH = t.fontHeight() + 4;               // 12 at size 1, as before
+        n = wrapText(t, text, textMaxW, lines, INFO_MAX_LINES);
+        if (size == 1 || n * lineH <= room) break;
+    }
     int ly = textTop;
-    for (uint8_t i = 0; i < n; i++) {
+    for (uint8_t i = 0; i < n && ly + lineH - 4 <= btnY - 2; i++) {
         int lw = t.textWidth(lines[i]);
         t.setCursor(px + (pw - lw) / 2, ly);
         t.print(lines[i]);
-        ly += 12;
+        ly += lineH;
     }
+    t.setTextSize(1);
 
     drawButton(t, btnX, btnY, btnW, btnH, "[ GOT IT ]", false, 2);
 }

@@ -114,10 +114,6 @@ void uiMeshMenuTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // line that matters most sits beside the heading instead: a warning
     // about messages if there is one, else what the two switches mean.
     const bool below = top + ROW_N * rowH + 6 + 2 * t.fontHeight() + 3 <= h - Theme::PINNED_BACK_H - 2;
-    if (below) {
-        t.setCursor(8, top + ROW_N * rowH + 6);
-        t.print(note);
-    }
 
     // And one for messages, which need both halves: DETECT to hear one,
     // TRANSMIT to answer.
@@ -128,9 +124,26 @@ void uiMeshMenuTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
       : !Settings::meshDetect()      ? "Messages need DETECT on to be heard."
       : !Settings::meshTransmit()    ? "Messages: you can read, not reply."
                                      : "Messages: reading and replying.";
-    if (below && mnote) {
-        t.setCursor(8, top + ROW_N * rowH + 6 + t.fontHeight() + 3);
-        t.print(mnote);
+    if (below) {
+        // Wrapped at Theme::SMALL_TEXT when both notes fit under the rows
+        // that way (portrait on the 3.5" panel), else one size-1 line each.
+        const int y0 = top + ROW_N * rowH + 6, floorY = h - Theme::PINNED_BACK_H - 2;
+        const int nh = Theme::drawWrapped(t, 8, y0, w - 16, note, Theme::W95_LIGHT, Theme::BG, false, false);
+        const int mh = mnote ? Theme::drawWrapped(t, 8, y0, w - 16, mnote, Theme::W95_LIGHT, Theme::BG, false, false) : 0;
+        if (Theme::SMALL_TEXT > 1 && y0 + nh + 3 + mh <= floorY) {
+            Theme::drawWrapped(t, 8, y0, w - 16, note, Theme::W95_LIGHT, Theme::BG);
+            if (mnote) Theme::drawWrapped(t, 8, y0 + nh + 3, w - 16, mnote, Theme::W95_LIGHT, Theme::BG);
+        } else {
+            t.setTextSize(1);
+            t.setTextColor(Theme::W95_LIGHT, Theme::BG);
+            t.setCursor(8, y0);
+            t.print(note);
+            if (mnote) {
+                t.setCursor(8, y0 + t.fontHeight() + 3);
+                t.print(mnote);
+            }
+        }
+        t.setTextSize(1);
     }
     if (!below) {
         const bool warn = mnote && strcmp(mnote, "Messages: reading and replying.") != 0;

@@ -62,9 +62,12 @@ static void rowContent(PowerRow r, char* valBuf, size_t valBufN,
             break;
         }
         case PowerRow::DIM_LEVEL:
-            label = "DIM TO -  +";
-            if (!Settings::dimLevel()) snprintf(valBuf, valBufN, "OFF");
-            else snprintf(valBuf, valBufN, "%u%%", (unsigned)(Settings::dimLevel() * 100 / 255));
+            // Left half darker, right half brighter (main.cpp), so the minus
+            // leads the label and the plus ends the value -- "DIM TO -  +"
+            // drew the plus in the darker half. Same fix as BRIGHT.
+            label = "- DIM TO";
+            if (!Settings::dimLevel()) snprintf(valBuf, valBufN, "OFF +");
+            else snprintf(valBuf, valBufN, "%u%% +", (unsigned)(Settings::dimLevel() * 100 / 255));
             value = valBuf;
             break;
         case PowerRow::IDLE_FPS: {

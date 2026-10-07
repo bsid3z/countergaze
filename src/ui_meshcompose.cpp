@@ -406,9 +406,12 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // Two rows inside the same 22 pixels a canned line had to itself: a
     // typed message and its sender's name run past one row, and the list
     // below cannot move down to make room.
+    // S is Theme::SMALL_TEXT: 2 on the 3.5" panel, where every box below
+    // grows to hold its text at that size; 1 on the CYD, unchanged.
+    const int S = Theme::SMALL_TEXT, gh = 8 * S;
     const MeshTalk::Message& m = MeshTalk::inbox();
-    const int bx = 4, by = 26, bw = w - 8, bh = 22;
-    t.setTextSize(1);
+    const int bx = 4, by = 26, bw = w - 8, bh = S > 1 ? 2 * (gh + 2) + 4 : 22;
+    t.setTextSize(S);
     if (m.have) {
         char line[80];
         snprintf(line, sizeof line, "%s: %s", m.from, MeshTalk::lineText(m));
@@ -419,13 +422,13 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         const uint8_t n = Theme::wrapText(t, line, maxW, rows, 2);
         t.setTextColor(Theme::WHITE, Theme::RED);
         for (uint8_t i = 0; i < n; i++) {
-            t.setCursor(bx + 6, n == 1 ? by + (bh - 8) / 2 : by + 2 + i * 10);
+            t.setCursor(bx + 6, n == 1 ? by + (bh - gh) / 2 : by + 2 + i * (gh + 2));
             t.print(rows[i]);
         }
     } else {
         t.drawRoundRect(bx, by, bw, bh, 4, Theme::W95_SHADOW);
         t.setTextColor(Theme::W95_SHADOW, Theme::BG);
-        t.setCursor(bx + 6, by + (bh - 8) / 2);
+        t.setCursor(bx + 6, by + (bh - gh) / 2);
         t.print("No messages yet.");
     }
 
@@ -436,7 +439,7 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // portrait. The longest line is twenty characters, which is wider than half
     // of 240, so portrait keeps a single column.
     const int cols = port ? 1 : 2;
-    const int cw = (w - 8 - (cols - 1) * 6) / cols, ch = port ? 18 : 20;
+    const int cw = (w - 8 - (cols - 1) * 6) / cols, ch = S > 1 ? gh + 8 : (port ? 18 : 20);
     const int y0 = by + bh + 6;
     s_lineN = 0;
     if (s_typedOn) {
@@ -448,18 +451,19 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         t.setTextColor(Theme::W95_LIGHT, Theme::BG);
         t.setCursor(px + 6, py + 5);
         t.print("YOUR MESSAGE");
+        const int msgTop = py + 10 + gh;    // 18 at size 1
         t.setTextSize(2);
         char lines[4][48];
         const uint8_t n = Theme::wrapText(t, s_typed, pw - 12, lines, 4);
         t.setTextColor(Theme::WHITE, Theme::BG);
         for (uint8_t i = 0; i < n; i++) {
-            t.setCursor(px + 6, py + 18 + i * 19);
+            t.setCursor(px + 6, msgTop + i * 19);
             t.print(lines[i]);
         }
-        t.setTextSize(1);
+        t.setTextSize(S);
     } else if (s_emoteOn) {
         // A row of tabs, then the tab's six tiles where the lines were.
-        const int TH = 18;
+        const int TH = S > 1 ? gh + 8 : 18;
         const int tw = (w - 8 - (EmoteScript::TABS - 1) * 3) / EmoteScript::TABS;
         for (uint8_t i = 0; i < EmoteScript::TABS; i++) {
             const int x = 4 + i * (tw + 3);
@@ -468,8 +472,9 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
             t.fillRect(x, y0, tw, TH, on ? Theme::PURPLE : Theme::BG);
             t.drawRect(x, y0, tw, TH, on ? Theme::VAPOR_PINK : Theme::W95_SHADOW);
             const char* nm = EmoteScript::TAB_NAME[i];
+            Theme::setSmallText(t, nm, tw - 4);
             t.setTextColor(on ? Theme::labelOn(Theme::PURPLE) : Theme::W95_LIGHT, on ? Theme::PURPLE : Theme::BG);
-            t.setCursor(x + (tw - t.textWidth(nm)) / 2, y0 + (TH - 8) / 2);
+            t.setCursor(x + (tw - t.textWidth(nm)) / 2, y0 + (TH - t.fontHeight()) / 2);
             t.print(nm);
         }
         const int ty0 = y0 + TH + 5;
@@ -490,8 +495,15 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
             drawEmoteIcon(t, (uint8_t)e, x + 15, y + eh / 2);
             const char* sub = EmoteScript::sub(e);
             const bool two = sub[0] != '\0';
+            // Size 2 only if the name and the sub both fit beside the icon,
+            // and two lines of it fit the tile's height.
+            t.setTextSize(S);
+            if (S > 1 && (t.textWidth(EmoteScript::name(e)) > ew - 34 || t.textWidth(sub) > ew - 34 ||
+                          (two && eh < 2 * gh + 4)))
+                t.setTextSize(1);
+            const int fh = t.fontHeight();
             t.setTextColor(Theme::WHITE, Theme::BG);
-            t.setCursor(x + 30, y + eh / 2 - (two ? 9 : 4));
+            t.setCursor(x + 30, y + eh / 2 - (two ? fh + 1 : fh / 2));
             t.print(EmoteScript::name(e));
             if (two) {
                 t.setCursor(x + 30, y + eh / 2 + 1);
@@ -499,10 +511,11 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
             }
         }
     } else if (s_fillOn) {
-        const int LTH = 18;
-        t.setTextColor(Theme::VAPOR_YELLOW, Theme::BG);
+        const int LTH = S > 1 ? gh + 8 : 18;
         const char* hd = "PICK A START, TYPE THE REST";
-        t.setCursor((w - t.textWidth(hd)) / 2, y0 + (LTH - 8) / 2);
+        Theme::setSmallText(t, hd, w - 8);
+        t.setTextColor(Theme::VAPOR_YELLOW, Theme::BG);
+        t.setCursor((w - t.textWidth(hd)) / 2, y0 + (LTH - t.fontHeight()) / 2);
         t.print(hd);
         const int ly0 = y0 + LTH + 5;
         for (int i = 0; i < 8; i++) {
@@ -512,8 +525,11 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
             s_lineN++;
             t.fillRect(x, y, cw, ch, Theme::BG);
             t.drawRect(x, y, cw, ch, Theme::VAPOR_YELLOW);
+            char fl[40];
+            snprintf(fl, sizeof fl, "%s___", FILL_LINES[i]);
+            Theme::setSmallText(t, fl, cw - 10);
             t.setTextColor(Theme::WHITE, Theme::BG);
-            t.setCursor(x + 6, y + (ch - 8) / 2);
+            t.setCursor(x + 6, y + (ch - t.fontHeight()) / 2);
             t.print(FILL_LINES[i]);
             t.setTextColor(Theme::W95_SHADOW, Theme::BG);
             t.print("___");
@@ -521,7 +537,7 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     } else {
         // The same tab row the emote half draws, in the same place, so the two
         // pickers read as one control with two halves.
-        const int LTH = 18;
+        const int LTH = S > 1 ? gh + 8 : 18;
         const int ltw = (w - 8 - (MeshMsg::CANNED_TABS - 1) * 3) / MeshMsg::CANNED_TABS;
         for (uint8_t i = 0; i < MeshMsg::CANNED_TABS; i++) {
             const int x = 4 + i * (ltw + 3);
@@ -530,8 +546,9 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
             t.fillRect(x, y0, ltw, LTH, on ? Theme::PURPLE : Theme::BG);
             t.drawRect(x, y0, ltw, LTH, on ? Theme::VAPOR_PINK : Theme::W95_SHADOW);
             const char* nm = MeshMsg::CANNED_TAB_NAME[i];
+            Theme::setSmallText(t, nm, ltw - 4);
             t.setTextColor(on ? Theme::labelOn(Theme::PURPLE) : Theme::W95_LIGHT, on ? Theme::PURPLE : Theme::BG);
-            t.setCursor(x + (ltw - t.textWidth(nm)) / 2, y0 + (LTH - 8) / 2);
+            t.setCursor(x + (ltw - t.textWidth(nm)) / 2, y0 + (LTH - t.fontHeight()) / 2);
             t.print(nm);
         }
         const int ly0 = y0 + LTH + 5;
@@ -546,8 +563,9 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
             const uint16_t bg = sel ? Theme::PURPLE : Theme::BG;
             t.fillRect(x, y, cw, ch, bg);
             t.drawRect(x, y, cw, ch, sel ? Theme::VAPOR_PINK : Theme::CYAN);
+            Theme::setSmallText(t, MeshMsg::CANNED[idx], cw - 10);
             t.setTextColor(sel ? Theme::labelOn(bg) : Theme::WHITE, bg);
-            t.setCursor(x + 6, y + (ch - 8) / 2);
+            t.setCursor(x + 6, y + (ch - t.fontHeight()) / 2);
             t.print(MeshMsg::CANNED[idx]);
         }
     }
@@ -580,8 +598,9 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         if (!st && MeshTalk::sending(now)) { st = SENDING; sc = Theme::GREEN; }
     }
     if (st) {
+        Theme::setSmallText(t, st, w - 16);
         t.setTextColor(sc, Theme::BG);
-        t.setCursor(8, h - BH - 6 - 12);
+        t.setCursor(8, h - BH - 6 - 4 - t.fontHeight());
         t.print(st);
     }
 

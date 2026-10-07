@@ -29,13 +29,15 @@ static void formatDuration(uint32_t ms, char* buf, size_t n) {
 }
 
 static void drawStat(TFT_eSPI& t, int w, int y, int h, const char* label, const char* value) {
-    t.setTextSize(1);
+    // Size 2 (Theme::SMALL_TEXT) unless label and value would meet.
+    t.setTextSize(Theme::SMALL_TEXT);
+    if (8 + t.textWidth(label) + 12 + t.textWidth(value) + 8 > w) t.setTextSize(1);
     t.setTextColor(Theme::CYAN, Theme::BG);
-    t.setCursor(8, y + (h - t.fontHeight(1)) / 2);
+    t.setCursor(8, y + (h - t.fontHeight()) / 2);
     t.print(label);
     t.setTextColor(Theme::WHITE, Theme::BG);
     int vw = t.textWidth(value);
-    t.setCursor(w - 8 - vw, y + (h - t.fontHeight(1)) / 2);
+    t.setCursor(w - 8 - vw, y + (h - t.fontHeight()) / 2);
     t.print(value);
     t.drawFastHLine(4, y + h - 1, w - 8, Theme::PURPLE);
 }
@@ -102,9 +104,9 @@ void uiDiaryTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // nearly nothing in the frame buffer, in every theme.
     float pulse = 0.825f + 0.175f * sinf((float)(now % 1600) / 1600.0f * 6.2831853f);
     uint16_t col = Theme::blend(Theme::BG, Theme::CYAN, (uint16_t)(pulse * 255.0f));
-    t.setTextSize(1);
-    t.setTextColor(col, Theme::BG);
     const char* hint = "tap anywhere to go back";
+    Theme::setSmallText(t, hint, w - 16);
+    t.setTextColor(col, Theme::BG);
     int hw = t.textWidth(hint);
     t.setCursor((w - hw) / 2, top + 9 * rowH + 8);
     t.print(hint);

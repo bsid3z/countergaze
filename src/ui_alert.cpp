@@ -234,6 +234,9 @@ static void ignoreBtnRect(int screenW, int screenH, int& bx, int& by, int& bw, i
     // were already stepping down at any width.
     bw = 62;
     bh = 28;
+    // The 3.5" panel is 320+ wide on every rotation, so the label's budget
+    // has room for a button wide enough for "IGNORE" at size 2 (72px).
+    if (Theme::SMALL_TEXT > 1) bw = 84;
     // 8 from the edge rather than 4. The margin has to clear the BORDER, not
     // the screen: with a 3px frame drawn over the outermost columns, a 4px
     // margin left the button one pixel off it, which reads as a collision
@@ -396,11 +399,17 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
     // Two columns when there is width for them: identity on the left,
     // the gauge on the right. The 240px rotation cannot hold both, so it
     // keeps the full-width plate and puts a smaller gauge underneath.
-    const bool wide = (w >= 300);
+    //
+    // On the 3.5" panel (Theme::SMALL_TEXT 2) the plate's text is size 2, so
+    // the plate grows: wider beside the gauge in landscape, and full width
+    // with the gauge under it in portrait, where 320 cannot hold both.
+    const bool big  = Theme::SMALL_TEXT > 1;
+    const bool wide = (w >= 300) && !(big && h > w);
     const int PLATE_X = wide ? 12 : 14;
-    const int PLATE_Y = STRIP_H + 12;
-    const int PLATE_W = wide ? 168 : (w - 28);
-    const int PLATE_H = 98;
+    const int PLATE_Y = STRIP_H + (big ? 20 : 12);
+    const int PLATE_W = wide ? (big ? 232 : 168) : (w - 28);
+    const int PLATE_H = big ? 134 : 98;
+    const int S = Theme::SMALL_TEXT;
     t.fillRect(PLATE_X, PLATE_Y, PLATE_W, PLATE_H, Theme::BG);
     t.drawRect(PLATE_X, PLATE_Y, PLATE_W, PLATE_H, typeCol);
 
@@ -433,9 +442,9 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
     // The device's own name, where it has one -- a Flipper's nickname, a
     // Pwnagotchi's, a drone's serial, an iBeacon's deployment. Carried in
     // Detection all along and never drawn on this screen.
-    t.setTextSize(1);
     t.setTextColor(Theme::WHITE, Theme::BG);
     if (s_last.name[0] && !s_redacted) {
+        Theme::setSmallText(t, s_last.name, PLATE_W - 8);
         t.setCursor(PLATE_X + (PLATE_W - t.textWidth(s_last.name)) / 2, PLATE_Y + 38);
         t.print(s_last.name);
     }
@@ -447,14 +456,16 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
         snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
                  s_last.mac[0], s_last.mac[1], s_last.mac[2],
                  s_last.mac[3], s_last.mac[4], s_last.mac[5]);
-    t.setCursor(PLATE_X + (PLATE_W - t.textWidth(mac)) / 2, PLATE_Y + 50);
+    Theme::setSmallText(t, mac, PLATE_W - 8);
+    t.setCursor(PLATE_X + (PLATE_W - t.textWidth(mac)) / 2, PLATE_Y + (big ? 58 : 50));
     t.print(mac);
 
     // Signal as a bar as well as a number: -90 dBm empty, -40 full. The
     // number is for the log; the bar is what reads from across a room.
     {
-        const int BAR_X = PLATE_X + 8, BAR_Y = PLATE_Y + 72;
+        const int BAR_X = PLATE_X + 8, BAR_Y = PLATE_Y + (big ? 98 : 72);
         const int BAR_W = PLATE_W - 16, BAR_H = 12;
+        t.setTextSize(S);
         t.setTextColor(Theme::CYAN, Theme::BG);
         // Label above the bar rather than beside it: the two-column layout
         // leaves the plate 168 wide, and a label plus a usable meter do not
@@ -462,11 +473,11 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
         // right-aligned -- which is also what takes it out of the readout
         // line below, where the four fields together ran 174px into a 168px
         // plate and pushed the sighting count off the edge.
-        t.setCursor(PLATE_X + 8, BAR_Y - 12);
+        t.setCursor(PLATE_X + 8, BAR_Y - 4 - 8 * S);
         t.print("SIGNAL");
         t.setTextColor(confColor, Theme::BG);
         const char* cl = confidenceLabel(conf);
-        t.setCursor(PLATE_X + PLATE_W - 8 - t.textWidth(cl), BAR_Y - 12);
+        t.setCursor(PLATE_X + PLATE_W - 8 - t.textWidth(cl), BAR_Y - 4 - 8 * S);
         t.print(cl);
         int v = s_last.rssi;
         if (v < -90) v = -90;
@@ -481,15 +492,16 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
     char info[40];
     snprintf(info, sizeof(info), "%d dBm   CH %u   x%u",
              s_last.rssi, s_last.channel, (unsigned)s_last.hits);
+    Theme::setSmallText(t, info, PLATE_W - 8);
     t.setTextColor(confColor, Theme::BG);
-    t.setCursor(PLATE_X + (PLATE_W - t.textWidth(info)) / 2, PLATE_Y + PLATE_H - 11);
+    t.setCursor(PLATE_X + (PLATE_W - t.textWidth(info)) / 2, PLATE_Y + PLATE_H - 3 - t.fontHeight());
     t.print(info);
     // The first one of its kind, ever, on this board: a line in the gap
     // between the strip and the plate, in the strip's own colour.
     if (s_first || s_night) {
         const char* fl = (s_first && s_night) ? "* FIRST, AND AT NIGHT *"
                        : s_first ? "* FIRST OF ITS KIND *" : "* AT NIGHT *";
-        t.setTextSize(1);
+        Theme::setSmallText(t, fl, PLATE_W);
         t.setTextColor(Theme::VAPOR_YELLOW, Theme::BG);
         t.setCursor(PLATE_X + (PLATE_W - t.textWidth(fl)) / 2, STRIP_H + 2);
         t.print(fl);
@@ -497,7 +509,7 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
         // Shares the line, and loses it to FIRST or AT NIGHT, both of which
         // are about the catch itself. This one is housekeeping.
         const char* fl = "* QUIET UNLESS IT NEARS *";
-        t.setTextSize(1);
+        Theme::setSmallText(t, fl, PLATE_W);
         t.setTextColor(Theme::CYAN, Theme::BG);
         t.setCursor(PLATE_X + (PLATE_W - t.textWidth(fl)) / 2, STRIP_H + 2);
         t.print(fl);
@@ -525,12 +537,18 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
         const int floorY = h - 56;
         const int gx = wide ? (PLATE_X + PLATE_W + (w - PLATE_X - PLATE_W) / 2)
                             : (w / 2);
+        // Stacked on the tall 3.5" panel, the gauge gets the whole band
+        // under the plate rather than the CYD's fixed little one.
+        const bool tallBand = big && !wide;
         const int gy = wide ? ((ceilY + floorY) / 2)
+                     : tallBand ? ((PLATE_Y + PLATE_H + floorY) / 2)
                             : (PLATE_Y + PLATE_H + 30);
         // Bounded by whichever runs out first: the width beside the plate,
         // or the height of the band -- and the well is 4px larger than the
         // radius on every side, so that is what has to fit, not the circle.
-        int gr = wide ? ((w - PLATE_X - PLATE_W) / 2 - 6) : 26;
+        int gr = wide ? ((w - PLATE_X - PLATE_W) / 2 - 6) : tallBand ? 60 : 26;
+        const int gCeil = tallBand ? PLATE_Y + PLATE_H + 4 : ceilY;
+        if (gy - gr - 4 < gCeil)  gr = gy - gCeil - 4;
         if (gy - gr - 4 < ceilY)  gr = gy - ceilY - 4;
         if (gy + gr + 4 > floorY) gr = floorY - gy - 4;
         if (gr > 60) gr = 60;

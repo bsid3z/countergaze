@@ -62,11 +62,14 @@ struct Filter {
     }
 } s_filter;
 
-const int TOP_H   = 52;               // header and field above the keys
+// A taller header where the small text is size 2 (Theme::SMALL_TEXT), so
+// BACK, SHOW and the network's name are not 8px letters.
+const bool BIG    = Theme::SMALL_TEXT > 1;
+const int TOP_H   = BIG ? 66 : 52;     // header and field above the keys
 const int MARGIN  = 4, GAP = 2, ROW_GAP = 4;
-const int BACK_X  = 4, BACK_Y = 3, BACK_W = 52, BACK_H = 18;
-const int FIELD_Y = 28, FIELD_H = 20;
-const int SHOW_W  = 50;
+const int BACK_X  = 4, BACK_Y = 3, BACK_W = BIG ? 64 : 52, BACK_H = BIG ? 26 : 18;
+const int FIELD_Y = BIG ? 36 : 28, FIELD_H = BIG ? 26 : 20;
+const int SHOW_W  = BIG ? 64 : 50;
 
 // Letters page and symbols page, row by row. A zero is a blank key.
 const char* const PAGE_ABC[4] = { "1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm" };
@@ -257,16 +260,35 @@ void drawAll(TFT_eSPI& t, uint32_t now) {
     t.setTextWrap(false);
     // Header: BACK, then which network this is for.
     Theme::drawWin95Button(t, BACK_X, BACK_Y, BACK_W, BACK_H, "BACK", false);
-    t.setTextSize(1);
-    t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
-    t.setCursor(BACK_X + BACK_W + 8, BACK_Y + 1);
-    t.print("PASSWORD FOR");
-    t.setTextColor(Theme::CYAN, Theme::BG);
-    t.setCursor(BACK_X + BACK_W + 8, BACK_Y + 11);
-    char ssid[40];
-    const int maxChars = (w - (BACK_X + BACK_W + 8) - MARGIN) / t.textWidth("M");
-    snprintf(ssid, sizeof ssid, "%.*s", maxChars > 32 ? 32 : maxChars, s_ssid);
-    t.print(ssid);
+    if (BIG) {
+        // One line at size 2: "FOR" and the name. Two stacked lines only
+        // fit beside BACK at size 1.
+        t.setTextSize(2);
+        const int x0 = BACK_X + BACK_W + 8;
+        const int ty = BACK_Y + (BACK_H - t.fontHeight()) / 2;
+        t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
+        t.setCursor(x0, ty);
+        t.print("FOR");
+        const int x1 = x0 + t.textWidth("FOR ");
+        t.setTextColor(Theme::CYAN, Theme::BG);
+        t.setCursor(x1, ty);
+        char ssid[40];
+        const int maxChars = (w - x1 - MARGIN) / t.textWidth("M");
+        snprintf(ssid, sizeof ssid, "%.*s", maxChars > 32 ? 32 : maxChars, s_ssid);
+        t.print(ssid);
+        t.setTextSize(1);
+    } else {
+        t.setTextSize(1);
+        t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
+        t.setCursor(BACK_X + BACK_W + 8, BACK_Y + 1);
+        t.print("PASSWORD FOR");
+        t.setTextColor(Theme::CYAN, Theme::BG);
+        t.setCursor(BACK_X + BACK_W + 8, BACK_Y + 11);
+        char ssid[40];
+        const int maxChars = (w - (BACK_X + BACK_W + 8) - MARGIN) / t.textWidth("M");
+        snprintf(ssid, sizeof ssid, "%.*s", maxChars > 32 ? 32 : maxChars, s_ssid);
+        t.print(ssid);
+    }
     drawField(t, w, now);
     drawShow(t, w);
     drawKeys(t);
