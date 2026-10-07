@@ -524,11 +524,10 @@ void drawWin95Button(TFT_eSPI& t, int x, int y, int w, int h,
 
 ButtonBarGeom computeButtonBar(int screenW, int screenH) {
     ButtonBarGeom g;
-    // Half of the original 40px (which was sized to comfortably clear
-    // ~9mm finger-touch-target guidance) — explicitly requested smaller
-    // to free up more room above for content. Still tappable, just a
-    // tighter target than the original guidance-driven size.
-    g.h = 20;
+    // Tall enough for a size-2 label (16px) with room round it -- see
+    // drawBarButton(). It was 20, cut from an original 40 for room above,
+    // and the size-1 labels that fitted it were asked to be bigger.
+    g.h = 30;
     const int margin = 8, gap = 8;
     g.y = screenH - g.h - 6;
     int bw = (screenW - 2 * margin - 2 * gap) / 3;
@@ -539,17 +538,35 @@ ButtonBarGeom computeButtonBar(int screenW, int screenH) {
     return g;
 }
 
+void drawBarButton(TFT_eSPI& t, int x, int y, int w, int h,
+                   const char* label, bool pressed) {
+    t.setTextSize(2);
+    if (t.fontHeight() <= h - 6) {
+        if (t.textWidth(label) <= w - 6) { drawButton(t, x, y, w, h, label, pressed, 2); return; }
+        // "[ STATS ]" -> "STATS": the brackets are decoration, the size is the point.
+        const size_t n = strlen(label);
+        if (n > 4 && n < 32 && label[0] == '[' && label[1] == ' ' &&
+            label[n - 2] == ' ' && label[n - 1] == ']') {
+            char bare[32];
+            memcpy(bare, label + 2, n - 4);
+            bare[n - 4] = 0;
+            if (t.textWidth(bare) <= w - 6) { drawButton(t, x, y, w, h, bare, pressed, 2); return; }
+        }
+    }
+    drawButton(t, x, y, w, h, label, pressed, 1);
+}
+
 void drawButtonBar(TFT_eSPI& t, ButtonId highlighted, ButtonBarMode mode) {
     ButtonBarGeom g = computeButtonBar(t.width(), t.height());
     if (mode == ButtonBarMode::SCAN_PICKER) {
-        drawButton(t, g.x[0], g.y, g.w[0], g.h, "[ BLE ]",  highlighted == ButtonId::SCAN);
-        drawButton(t, g.x[1], g.y, g.w[1], g.h, "[ WIFI ]", highlighted == ButtonId::LOG);
-        drawButton(t, g.x[2], g.y, g.w[2], g.h, "[ BACK ]", highlighted == ButtonId::CLR);
+        drawBarButton(t, g.x[0], g.y, g.w[0], g.h, "[ BLE ]",  highlighted == ButtonId::SCAN);
+        drawBarButton(t, g.x[1], g.y, g.w[1], g.h, "[ WIFI ]", highlighted == ButtonId::LOG);
+        drawBarButton(t, g.x[2], g.y, g.w[2], g.h, "[ BACK ]", highlighted == ButtonId::CLR);
         return;
     }
-    drawButton(t, g.x[0], g.y, g.w[0], g.h, "[ SCAN ]", highlighted == ButtonId::SCAN);
-    drawButton(t, g.x[1], g.y, g.w[1], g.h, "[ LOG ]",  highlighted == ButtonId::LOG);
-    drawButton(t, g.x[2], g.y, g.w[2], g.h, mode == ButtonBarMode::LOG ? "[ CLR ]" : "[ DESK ]",
+    drawBarButton(t, g.x[0], g.y, g.w[0], g.h, "[ SCAN ]", highlighted == ButtonId::SCAN);
+    drawBarButton(t, g.x[1], g.y, g.w[1], g.h, "[ LOG ]",  highlighted == ButtonId::LOG);
+    drawBarButton(t, g.x[2], g.y, g.w[2], g.h, mode == ButtonBarMode::LOG ? "[ CLR ]" : "[ DESK ]",
                highlighted == ButtonId::CLR);
 }
 

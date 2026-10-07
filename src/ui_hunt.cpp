@@ -256,7 +256,7 @@ void uiHuntTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
 
     int bx, by, bw, bh;
     backButtonRect(w, h, bx, by, bw, bh);
-    Theme::drawButton(t, bx, by, bw, bh, "[ BACK ]", false);
+    Theme::drawBarButton(t, bx, by, bw, bh, "[ BACK ]", false);
     stopButtonRect(w, h, bx, by, bw, bh);
-    Theme::drawButton(t, bx, by, bw, bh, "[ STOP ]", false);
+    Theme::drawBarButton(t, bx, by, bw, bh, "[ STOP ]", false);
 }

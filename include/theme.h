@@ -194,6 +194,12 @@ namespace Theme {
     void drawButton(TFT_eSPI& t, int x, int y, int w, int h,
                     const char* label, bool pressed, uint8_t textSize = 1);
 
+    // drawButton() for the bottom bar: the label at size 2 wherever it fits,
+    // losing its "[ ]" before it loses the size, and at size 1 only when
+    // even the bare word is too wide for the button.
+    void drawBarButton(TFT_eSPI& t, int x, int y, int w, int h,
+                       const char* label, bool pressed);
+
     // A real Windows 95/98 push button: silver face, two-pixel bevel, black
     // system-font label. `sunken` inverts the bevel and nudges the label a
     // pixel down and right, which is what Win95 itself did and is the whole

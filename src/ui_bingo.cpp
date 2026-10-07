@@ -229,11 +229,11 @@ void uiBingoTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     if (s_stats) drawStats(t, w, h);
     else         drawCard(t, w, h);
 
-    Theme::drawButton(t, bar.x[0], bar.y, bar.w[0], bar.h, s_stats ? "[ CARD ]" : "[ STATS ]", false);
-    Theme::drawButton(t, bar.x[1], bar.y, bar.w[1], bar.h, "[ NEW ]", s_confirm);
+    Theme::drawBarButton(t, bar.x[0], bar.y, bar.w[0], bar.h, s_stats ? "[ CARD ]" : "[ STATS ]", false);
+    Theme::drawBarButton(t, bar.x[1], bar.y, bar.w[1], bar.h, "[ NEW ]", s_confirm);
     // OK, not BACK: this leaves for the screen the board lives on, the way
     // Settings' own OK does, rather than stepping back into the menu.
-    Theme::drawButton(t, bar.x[2], bar.y, bar.w[2], bar.h, "[ OK ]", false);
+    Theme::drawBarButton(t, bar.x[2], bar.y, bar.w[2], bar.h, "[ OK ]", false);
 
     // Over everything else, and last: the panel that was asked for.
     if (s_confirm) drawConfirm(t, w, h);

@@ -703,8 +703,8 @@ void uiDeskTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     timerRects(w, h, tx, ty, tw, tth, bx, bw);
     char lbl[16];
     timerLabel(lbl, sizeof lbl, now);
-    Theme::drawButton(t, tx, ty, tw, tth, lbl, s_timer != Timer::IDLE);
-    Theme::drawButton(t, bx, ty, bw, tth, "BACK", false);
+    Theme::drawBarButton(t, tx, ty, tw, tth, lbl, s_timer != Timer::IDLE);
+    Theme::drawBarButton(t, bx, ty, bw, tth, "BACK", false);
     {
         int gx, gy, gs;
         gearRect(w, h, gx, gy, gs);

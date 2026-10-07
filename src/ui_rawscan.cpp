@@ -54,11 +54,25 @@ RawScanTap uiRawScanHitTest(int x, int y, int screenW, int screenH) {
     return RawScanTap::NONE;
 }
 
+// The signal strength at the right of a row, at the name's size 2. The name is
+// already drawn and runs to the edge, so the strip under the number (and the
+// arrow room, `lead` px, BLE only) is cleared first. Returns its width.
+static int drawRssi(TFT_eSPI& t, int w, int y, const char* rssi, int lead) {
+    t.setTextSize(2);
+    const int rw = t.textWidth(rssi);
+    const int x  = w - rw - 14;
+    t.fillRect(x - lead - 4, y, rw + lead + 4, t.fontHeight(), Theme::BG);
+    t.setTextColor(Theme::VAPOR_PURPLE, Theme::BG);
+    t.setCursor(x, y);
+    t.print(rssi);
+    return rw;
+}
+
 static void drawBottomBar(TFT_eSPI& t, int w, int h, bool isBle) {
     int bx, by, bw, bh, ax, ay, aw, ah;
     bottomButtonRects(w, h, bx, by, bw, bh, ax, ay, aw, ah);
-    Theme::drawButton(t, bx, by, bw, bh, "[ BACK ]", false);
-    Theme::drawButton(t, ax, ay, aw, ah, isBle ? "[ WIFI ]" : "[ BLE ]", false);
+    Theme::drawBarButton(t, bx, by, bw, bh, "[ BACK ]", false);
+    Theme::drawBarButton(t, ax, ay, aw, ah, isBle ? "[ WIFI ]" : "[ BLE ]", false);
 }
 
 // Confirm panel geometry, shared by its drawing (in uiRawScanTick())
@@ -336,20 +350,17 @@ switch (Settings::background()) {
             t.setCursor(4, y + detailY);
             t.print(mac);
 
-            t.setTextColor(Theme::VAPOR_PURPLE, Theme::BG);
             char rssi[12];
             snprintf(rssi, sizeof(rssi), "%ddBm", r->rssi);
-            int rw = t.textWidth(rssi);
-            t.setCursor(w - rw - 14, y + topPad);
-            t.print(rssi);
+            const int rw = drawRssi(t, w, y + topPad, rssi, 16);
             // Closer or further since the last reading: an arrow beside the
             // number, green up for nearer, red down for further, nothing for
             // a wobble of under four dB, which is what a still device does.
             {
                 const int d  = (int)r->rssi - (int)r->prev;
-                const int ax = w - rw - 14 - 11, ay = y + topPad + 1;
-                if (d >= 4)       t.fillTriangle(ax, ay + 6, ax + 6, ay + 6, ax + 3, ay, Theme::GREEN);
-                else if (d <= -4) t.fillTriangle(ax, ay, ax + 6, ay, ax + 3, ay + 6, Theme::RED);
+                const int ax = w - rw - 14 - 14, ay = y + topPad + 3;
+                if (d >= 4)       t.fillTriangle(ax, ay + 10, ax + 10, ay + 10, ax + 5, ay, Theme::GREEN);
+                else if (d <= -4) t.fillTriangle(ax, ay, ax + 10, ay, ax + 5, ay + 10, Theme::RED);
             }
         } else {
             t.setTextSize(2);
@@ -365,12 +376,9 @@ switch (Settings::background()) {
             t.setCursor(4, y + detailY);
             t.print(line);
 
-            t.setTextColor(Theme::VAPOR_PURPLE, Theme::BG);
             char rssi[12];
             snprintf(rssi, sizeof(rssi), "%ddBm", eng.rawWifiRssi(idx));
-            int rw = t.textWidth(rssi);
-            t.setCursor(w - rw - 14, y + topPad);
-            t.print(rssi);
+            drawRssi(t, w, y + topPad, rssi, 0);
         }
 
         y += rowH;

@@ -1489,7 +1489,12 @@ static bool hadBubble   = false;
 // narrow portrait screen does it grow into a fixed-width, centered
 // multi-line box instead of letting the single-line version run off
 // (or past) both screen edges, which is what happened before this.
-static const uint8_t BUBBLE_MAX_LINES = 2;
+static const uint8_t BUBBLE_MAX_LINES = 4;   // 2 at size 1; size 2 fits half the words per line
+// His speech bubble's text: the GLCD font at size 2, the same face and size as
+// the names in the raw-scan lists. Font 2 at size 1 was too small to read at
+// arm's length, and font 2 at size 2 far too big. Only this bubble -- the
+// desk, CLEAR and settings panels use the shared bubble font and stay as-is.
+static const uint8_t BUBBLE_SIZE = 2;
 
 // A bubble used to exist on one frame and not on the frame before it,
 // which is the most conspicuously un-animated thing on the CLEAR
@@ -1628,15 +1633,15 @@ void holdBubble(bool held) { s_bubbleHeld = held; }
 static void drawBubble(TFT_eSPI& t, int cx, int topY, const char* text,
                        uint32_t now, bool mayRise = false, int tailX = NO_TAIL) {
     if (s_bubbleHeld) return;
-    Theme::bubbleFontOn(t);
+    t.setTextFont(1);
     drawBubbleIn(t, cx, topY, text, now, mayRise, tailX);
-    Theme::bubbleFontOff(t);
+    t.setTextSize(1);
 }
 
 
 static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
                          uint32_t now, bool mayRise, int tailX) {
-    t.setTextSize(1);
+    t.setTextSize(BUBBLE_SIZE);
     t.setTextWrap(false);
     int screenW = t.width();
     int maxW = screenW - 16;   // widest a wrapped bubble is allowed to get
@@ -1645,7 +1650,7 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
     if (tw <= maxW - 10) {
         // Fits on one line -- the original compact box.
         int bw = tw + 10;
-        int bh = Theme::bubbleTextH() + 6;
+        int bh = t.fontHeight() + 6;
         int bx = cx - bw / 2;
         if (bx + bw > screenW - 2) bx = screenW - 2 - bw;
         if (bx < 2) bx = 2;
@@ -1654,7 +1659,7 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
         t.fillRoundRect(bx, by, bw, bh, 3, Theme::BG);
         t.drawRoundRect(bx, by, bw, bh, 3, Theme::VAPOR_PINK);
         t.setTextColor(Theme::WHITE, Theme::BG);
-        t.setCursor(bx + 5, by + 3 + Theme::bubbleAscent());
+        t.setCursor(bx + 5, by + 3);
         t.print(text);
         lastBubbleX = bx;
         lastBubbleY = by;
@@ -1677,7 +1682,7 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
     char lines[BUBBLE_MAX_LINES][48];
     uint8_t n = Theme::wrapText(t, text, bw - 10, lines, BUBBLE_MAX_LINES);
 
-    const int lineH = Theme::bubbleTextH() + 1;
+    const int lineH = t.fontHeight() + 1;
     int bh = 3 + (int)n * lineH + 3;
 
     // Asked the same question, and the width answers it: a wrapped box is
@@ -1691,7 +1696,7 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
     t.setTextColor(Theme::WHITE, Theme::BG);
     for (uint8_t i = 0; i < n; i++) {
         int lw = t.textWidth(lines[i]);
-        t.setCursor(bx + (bw - lw) / 2, by + 3 + i * lineH + Theme::bubbleAscent());
+        t.setCursor(bx + (bw - lw) / 2, by + 3 + i * lineH);
         t.print(lines[i]);
     }
     lastBubbleX = bx;
