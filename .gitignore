@@ -7,3 +7,10 @@
 # Host test binaries (test/Makefile builds into here)
 test/out/
 .tmp/
+
+# Text files are personal notes and stay local -- apart from the two
+# overviews, and the version stamp the firmware snapshot's README points to.
+*.txt
+!overview.txt
+!overview_dutch.txt
+!firmware/jc3248/VERSION.txt
